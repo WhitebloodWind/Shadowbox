@@ -3,29 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Outline to case</title>
+<title>Shadowbox</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#EDF1EF; --panel:#FFFFFF; --panel-2:#F5F8F6; --ink:#15201B; --muted:#56645D; --line:#D2DBD6;
-  --mat:#2D6652; --mat-ink:#E8F2EC; --cut:#E0372A; --engrave:#2C66DA; --accent:#2D6652; --accent-ink:#FFFFFF;
-  --warn-bg:#FBEEDF; --warn-ink:#8A4510; --ok:#2C7A4A; --focus:#2C66DA;
+  --bg:#ECF2F3; --panel:#FFFFFF; --panel-2:#F3F8F9; --ink:#12201F; --muted:#526567; --line:#CFDDDF;
+  --mat:#0F5A66; --mat-ink:#E2F4F6; --cut:#E0372A; --engrave:#B7C4FF; --accent:#0A7D8F; --accent-ink:#FFFFFF;
+  --warn-bg:#FBEEDF; --warn-ink:#8A4510; --ok:#0A7D8F; --focus:#0A7D8F;
   color-scheme: light;
   box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0F1412; --panel:#161D1A; --panel-2:#1B2420; --ink:#E3EAE6; --muted:#9AA8A1; --line:#2A3530;
-    --mat:#1D4537; --mat-ink:#D8E8DE; --cut:#FF5D50; --engrave:#6E9CFF; --accent:#62B592; --accent-ink:#0D1411;
-    --warn-bg:#3A2A18; --warn-ink:#F2C08A; --ok:#72C996; --focus:#6E9CFF; color-scheme: dark;
+    --bg:#0C1416; --panel:#131C1F; --panel-2:#182427; --ink:#E0ECEE; --muted:#93A8AB; --line:#26383B;
+    --mat:#0B3C45; --mat-ink:#D2ECEF; --cut:#FF5D50; --engrave:#B7C4FF; --accent:#3CC8DA; --accent-ink:#06171A;
+    --warn-bg:#3A2A18; --warn-ink:#F2C08A; --ok:#5FD6E4; --focus:#3CC8DA; color-scheme: dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0F1412; --panel:#161D1A; --panel-2:#1B2420; --ink:#E3EAE6; --muted:#9AA8A1; --line:#2A3530;
-  --mat:#1D4537; --mat-ink:#D8E8DE; --cut:#FF5D50; --engrave:#6E9CFF; --accent:#62B592; --accent-ink:#0D1411;
-  --warn-bg:#3A2A18; --warn-ink:#F2C08A; --ok:#72C996; --focus:#6E9CFF; color-scheme: dark;
+  --bg:#0C1416; --panel:#131C1F; --panel-2:#182427; --ink:#E0ECEE; --muted:#93A8AB; --line:#26383B;
+  --mat:#0B3C45; --mat-ink:#D2ECEF; --cut:#FF5D50; --engrave:#B7C4FF; --accent:#3CC8DA; --accent-ink:#06171A;
+  --warn-bg:#3A2A18; --warn-ink:#F2C08A; --ok:#5FD6E4; --focus:#3CC8DA; color-scheme: dark;
 }
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none !important}
@@ -37,6 +37,7 @@ button,input,select{font:inherit;color:inherit}
 header.top{display:flex;align-items:center;gap:20px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
 .brand{font-weight:750;font-stretch:112%;font-size:17px;letter-spacing:-.01em;white-space:nowrap}
 .brand span{color:var(--muted);font-weight:500;font-stretch:100%}
+.themebtn{margin-left:auto;padding:6px 11px;font-size:13px}
 .phases{display:flex;gap:4px;background:var(--panel-2);padding:3px;border-radius:9px;border:1px solid var(--line)}
 .phases button{border:0;background:transparent;padding:6px 14px;border-radius:7px;cursor:pointer;color:var(--muted);font-weight:600}
 .phases button[aria-selected="true"]{background:var(--panel);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
@@ -100,16 +101,17 @@ table.bom td.q{text-align:right;font-weight:650}
 #cube{width:120px;height:120px;cursor:pointer;display:block}
 #cubeHome{position:absolute;left:-6px;bottom:-6px;width:26px;height:26px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;font-size:14px;line-height:1;padding:0}
 .navhint{padding-right:130px}
-#photoBox{cursor:pointer;user-select:none}#photoBox input{width:auto;margin:0}
-.navhint{position:absolute;left:14px;bottom:12px;right:14px;font-size:12px;color:var(--muted, #8a9a90);pointer-events:none;line-height:1.5}
-.navhint b{font-weight:600;color:var(--ink, inherit)}
+#keyPreview{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#photoBox,#screwBox{cursor:pointer;user-select:none}#photoBox input,#screwBox input{width:auto;margin:0}
+.navhint{position:absolute;left:14px;bottom:12px;right:14px;font-size:12px;color:var(--mat-ink);opacity:.75;pointer-events:none;line-height:1.5}
+.navhint b{font-weight:650;color:var(--mat-ink)}
 @media (max-width:700px){.navhint .alt{display:none}}
 .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--mat-ink);padding:24px}
 .empty[hidden]{display:none}
 .empty .card{max-width:420px}
 .empty h2{font-weight:750;font-stretch:115%;font-size:28px;line-height:1.1;margin:0 0 10px;letter-spacing:-.01em}
 .empty p{margin:0 0 16px;opacity:.85}
-.empty .btn{background:var(--mat-ink);color:#173a2e;border-color:transparent}
+.empty .btn{background:var(--mat-ink);color:#0B3C45;border-color:transparent}
 .busy{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600}
 .busy[hidden]{display:none}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:9px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10}
@@ -145,11 +147,12 @@ input[type=file]{display:none}
 <body>
 <div class="app">
   <header class="top">
-    <div class="brand">Outline to case <span>for laser-cut acrylic</span></div>
+    <div class="brand">Shadowbox <span>for laser-cut acrylic</span></div>
     <div class="phases" role="tablist" aria-label="Workflow">
       <button role="tab" id="tab1" aria-selected="true"><b>1</b>Outline</button>
       <button role="tab" id="tab2" aria-selected="false"><b>2</b>Case</button>
     </div>
+    <button class="btn themebtn" id="themeBtn" aria-label="Switch between light and dark mode"></button>
   </header>
   <div class="main">
     <aside>
@@ -288,9 +291,11 @@ input[type=file]{display:none}
       <canvas id="cv1" aria-label="Photo and outline work area"></canvas>
       <canvas id="cv2" hidden aria-label="Cut layout"></canvas>
       <canvas id="cv3" hidden aria-label="3D model"></canvas>
+      <canvas id="keyPreview" aria-hidden="true"></canvas>
       <div class="hud" id="hud"></div>
       <div class="viewtabs" id="viewtabs" hidden>
         <label class="explode" id="photoBox" hidden><input type="checkbox" id="showPhoto" checked>Silhouette</label>
+        <label class="explode" id="screwBox" hidden><input type="checkbox" id="showScrews" checked>Screws</label>
         <div class="explode" id="explodeBox"><label for="explode">Explode</label><input type="range" id="explode" min="0" max="1" step="0.01" value="0.35"></div>
         <div class="seg" id="viewSeg"><button data-v="3d" aria-pressed="true">3D model</button><button data-v="layout" aria-pressed="false">Cut layout</button></div>
       </div>

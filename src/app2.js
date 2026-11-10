@@ -16,7 +16,7 @@ class Viewer {
     gl.attachShader(pq, sh(gl.FRAGMENT_SHADER, 'precision mediump float;varying vec2 vu;uniform sampler2D tex;uniform float a;void main(){vec4 c=texture2D(tex,vu);if(c.a<0.02)discard;gl_FragColor=c*a;}'));
     gl.linkProgram(pq); this.pq = pq;
     this.qloc = { p: gl.getAttribLocation(pq, 'p'), uv: gl.getAttribLocation(pq, 'uv'), M: gl.getUniformLocation(pq, 'M'), off: gl.getUniformLocation(pq, 'off'), tex: gl.getUniformLocation(pq, 'tex'), a: gl.getUniformLocation(pq, 'a') };
-    this.photo = null; this.showPhoto = true;
+    this.photo = null; this.showPhoto = true; this.showScrews = true;
     /* Navigation (Revit style):
        middle drag = pan, Shift + middle drag = orbit, wheel = zoom at the cursor, double-click middle = zoom to fit.
        Also: left drag = orbit, Shift + left or right drag = pan (for trackpads), two-finger pinch = zoom, double-click = fit. */
@@ -88,6 +88,11 @@ class Viewer {
     if (Math.abs(d[2]) < 1e-4) return null; const s = ((zp === undefined ? this.target[2] : zp) - e[2]) / d[2];
     if (!(s > 0) || s > this.dist * 50) return null; return d.map((di, i) => e[i] + di * s);
   }
+  project(p) { // world point -> CSS px in the canvas, or null behind the camera
+    const r = this.cv.getBoundingClientRect(); const { x, y, z } = this.camAxes(); const e = this.eye(); const v = [p[0] - e[0], p[1] - e[1], p[2] - e[2]];
+    const d = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; const cz = -d(v, z); if (cz <= 1e-6) return null; const f = r.height / 2 / Math.tan(0.3);
+    return [r.width / 2 + d(v, x) / cz * f, r.height / 2 - d(v, y) / cz * f];
+  }
   setPhoto(ph) { // ph: { canvas, x0, y0, x1, y1 (mm, y down), z, layer } or null
     if (!this.ok) return; const gl = this.gl;
     if (this.photo) { gl.deleteTexture(this.photo.tex); gl.deleteBuffer(this.photo.bp); gl.deleteBuffer(this.photo.bu); }
@@ -132,7 +137,8 @@ class Viewer {
     const Ld = [0.35, -0.45, 0.82]; const ll = Math.hypot(...Ld); gl.uniform3f(this.loc.L, Ld[0] / ll, Ld[1] / ll, Ld[2] / ll);
     const ex = this.explode * Math.max(8, (this.bb ? Math.max(this.bb.w, this.bb.h) : 100) * 0.12); this.ex = ex;
     const zOf = it => it.zc + ex * it.layer; const dEye = it => Math.hypot(t[0] - eye[0], t[1] - eye[1], zOf(it) - eye[2]);
-    const opaque = this.items.filter(i => i.alpha >= 1), clear = this.items.filter(i => i.alpha < 1).sort((a, b) => dEye(b) - dEye(a));
+    const shown = this.items.filter(i => this.showScrews || !i.screw);
+    const opaque = shown.filter(i => i.alpha >= 1), clear = shown.filter(i => i.alpha < 1).sort((a, b) => dEye(b) - dEye(a));
     this.drawItems(opaque, ex); this.drawItems(clear, ex); this.drawPhoto(M, ex);
     gl.depthMask(true);
   }
@@ -308,7 +314,7 @@ const Cube = (() => {
     if ($('#cubeBox').hidden || !viewer.ok) return;
     const dpr = window.devicePixelRatio || 1; if (cv.width !== S * dpr) { cv.width = S * dpr; cv.height = S * dpr; }
     const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, S, S);
-    const { ax, P } = geom(); const ink = '#1E2A24', panel = '#EEF2F0', line = '#8C9A93', acc = css('--accent') || '#3a8';
+    const { ax, P } = geom(); const ink = '#1B2433', panel = '#EEF2F7', line = '#8C97A8', acc = css('--accent') || '#3a8';
     const faces = F.map(f => ({ f, vis: dot(f.n, ax.z) })).filter(o => o.vis > 0.02).sort((p, q) => p.vis - q.vis);
     for (const { f, vis } of faces) {
       const pt = (a, b) => P([f.n[0] + a * f.u[0] + b * f.v[0], f.n[1] + a * f.u[1] + b * f.v[1], f.n[2] + a * f.u[2] + b * f.v[2]]);
@@ -391,6 +397,7 @@ viewer.clickZ = () => P2.p ? P2.p.plateT + P2.p.spacerT + (viewer.ex || 0) : 0;
 const viewSeg = seg('#viewSeg', v => { P2.view = v; P2.show(); });
 $('#explode').addEventListener('input', () => { viewer.explode = +$('#explode').value; viewer.render(); });
 $('#showPhoto').addEventListener('change', () => { viewer.showPhoto = $('#showPhoto').checked; viewer.render(); });
+$('#showScrews').addEventListener('change', () => { viewer.showScrews = $('#showScrews').checked; viewer.render(); });
 const joinSeg = seg('#joinSeg', v => { $('#noneRows').hidden = v !== 'none'; $('#screwRows').hidden = v !== 'screws'; $('#solventRows').hidden = v !== 'solvent'; P2.recompute(); });
 P2.keyPos = null; // where the keyring hole sits, as a fraction round the window edge; null until the user places it
 $('#keyring').addEventListener('change', () => { const on = $('#keyring').checked; $('#keyRows').hidden = !on; P2.setPlacing(on && P2.keyPos === null); P2.recompute(); });
@@ -400,8 +407,30 @@ P2.setPlacing = function (on) {
   P2.placing = on; $('#keyPlace').setAttribute('aria-pressed', String(on)); $('#keyPlace').textContent = on ? 'Cancel' : P2.keyPos === null ? 'Place the hole' : 'Move the hole';
   $('#keyHint').textContent = on ? 'Click where you want the hole on the 3D model or the cut layout. It goes on the nearest edge. Esc cancels.' : P2.keyPos === null ? 'The hole isn’t placed yet.' : 'The hole is placed. Click Move the hole to put it somewhere else.';
   $('#cv2').style.cursor = $('#cv3').style.cursor = on ? 'crosshair' : '';
+  if (!on && P2.drawKeyPreview) P2.drawKeyPreview(null);
 };
 $('#keyPlace').addEventListener('click', () => P2.setPlacing(!P2.placing));
+// Hover preview while placing: the hole and the tab of acrylic round it, where a click would put them.
+P2.drawKeyPreview = function (mm) {
+  const ov = $('#keyPreview'), r = ov.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  ov.width = Math.max(1, Math.round(r.width * dpr)); ov.height = Math.max(1, Math.round(r.height * dpr));
+  const c = ov.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, r.width, r.height);
+  if (!mm || !P2.placing || !P2.cs) return;
+  const ring = CaseGen.ringAt(P2.cs, mm[0], mm[1], Math.max(1.5, num('#keyD'))); if (!ring) return;
+  const off = (P2.view === '3d' ? $('#cv3') : $('#cv2')).getBoundingClientRect(); const ox = off.left - r.left, oy = off.top - r.top;
+  const toScr = P2.view === '3d'
+    ? (x, y) => { const q = viewer.project([x, -y, viewer.clickZ()]); return q && [q[0] + ox, q[1] + oy]; }
+    : (x, y) => [x * P2.lv.s + P2.lv.tx + ox, y * P2.lv.s + P2.lv.ty + oy];
+  const circle = rad => { const pts = []; for (let k = 0; k <= 48; k++) { const a = k / 48 * 2 * Math.PI, q = toScr(ring.x + rad * Math.cos(a), ring.y + rad * Math.sin(a)); if (!q) return false; pts.push(q); } c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); return true; };
+  if (circle(ring.tab)) { c.setLineDash([5, 4]); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke(); c.setLineDash([]); }
+  if (circle(ring.d / 2)) { c.fillStyle = 'rgba(80,210,230,0.30)'; c.fill(); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#6FE3F2'; c.stroke(); }
+  const at = toScr(ring.x + ring.tab, ring.y - ring.tab); if (!at) return;
+  const label = `Keyring ${fmt(ring.d)} mm`; c.font = '600 11px Archivo, sans-serif'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.fillStyle = '#fff';
+  c.strokeText(label, at[0] + 4, at[1] - 4); c.fillText(label, at[0] + 4, at[1] - 4);
+};
+$('#cv3').addEventListener('pointermove', e => { if (!P2.placing || e.buttons) return; const h = viewer.pickPlane(e.clientX, e.clientY, viewer.clickZ()); P2.drawKeyPreview(h && [h[0], -h[1]]); });
+$('#cv2').addEventListener('pointermove', e => { if (!P2.placing || e.buttons) return; const r = cv2.getBoundingClientRect(); P2.drawKeyPreview([(e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s]); });
+['#cv2', '#cv3'].forEach(id => $(id).addEventListener('pointerleave', () => P2.drawKeyPreview(null)));
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && P2.placing) P2.setPlacing(false); });
 P2.placeKeyring = function (x, y) { // x, y in case mm, y down
   if (!P2.cs || !P2.cs.lines.cavity) return;
@@ -430,7 +459,7 @@ P2.enter = function () {
 P2.show = function () {
   const has = !!P2.cs;
   $('#empty2').hidden = has; $('#cv2').hidden = !has || P2.view !== 'layout'; $('#cv3').hidden = !has || P2.view !== '3d';
-  $('#explodeBox').hidden = P2.view !== '3d'; $('#navHint').hidden = $('#cubeBox').hidden = !has || P2.view !== '3d'; if (P2.view !== '3d') $('#photoBox').hidden = true; else if (has) $('#photoBox').hidden = !viewer.photo; $('#legend').hidden = !has || P2.view !== 'layout'; $('#tools').hidden = P2.view === '3d' && has;
+  $('#explodeBox').hidden = P2.view !== '3d'; $('#screwBox').hidden = !has || P2.view !== '3d' || !(P2.meshes && P2.meshes.screws); $('#navHint').hidden = $('#cubeBox').hidden = !has || P2.view !== '3d'; if (P2.view !== '3d') $('#photoBox').hidden = true; else if (has) $('#photoBox').hidden = !viewer.photo; $('#legend').hidden = !has || P2.view !== 'layout'; $('#tools').hidden = P2.view === '3d' && has;
   if (has && P2.view === '3d') { if (!viewer.ok) { toast('3D preview needs WebGL, which isn’t available here. Showing the cut layout.'); viewSeg.set('layout'); P2.view = 'layout'; return P2.show(); } viewer.render(); }
   if (has && P2.view === 'layout') { if (!P2.lvOK) { P2.fitLayout(); P2.lvOK = cv2.getBoundingClientRect().width > 0; } P2.drawLayout(); }
 };
@@ -445,12 +474,12 @@ P2.recompute = function () {
     const bb = Geo.bbox(cs.lines.outer);
     const st = p.spacerT, pt = p.plateT;
     viewer.setItems([
-      { mesh: ms.back, color: [0.80, 0.90, 0.98], alpha: 0.32, edge: [0.55, 0.72, 0.85, 0.7], layer: 0, zc: pt / 2 },
-      { mesh: ms.figure, color: [0.90, 0.92, 0.91], alpha: 1, edge: [0.55, 0.60, 0.58, 0.5], layer: 1, zc: pt + p.figT / 2 },
-      { mesh: ms.spacer, color: [0.42, 0.66, 0.90], alpha: 0.55, edge: [0.3, 0.5, 0.75, 0.8], layer: 1, zc: pt + st / 2 },
-      { mesh: ms.front, color: [0.80, 0.90, 0.98], alpha: 0.32, edge: [0.55, 0.72, 0.85, 0.7], layer: 2, zc: pt * 1.5 + st },
-      { mesh: ms.screwHeads, color: [0.62, 0.65, 0.69], alpha: 1, edge: [0, 0, 0, 0], layer: 2.6, zc: 2 * pt + st },
-      { mesh: ms.screwNuts, color: [0.55, 0.58, 0.62], alpha: 1, edge: [0, 0, 0, 0], layer: -0.6, zc: 0 },
+      { mesh: ms.back, color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7], layer: 0, zc: pt / 2 },
+      { mesh: ms.figure, color: [0.90, 0.92, 0.95], alpha: 1, edge: [0.55, 0.59, 0.66, 0.5], layer: 1, zc: pt + p.figT / 2 },
+      { mesh: ms.spacer, color: [0.32, 0.78, 0.86], alpha: 0.55, edge: [0.22, 0.58, 0.66, 0.8], layer: 1, zc: pt + st / 2 },
+      { mesh: ms.front, color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7], layer: 2, zc: pt * 1.5 + st },
+      { screw: true, mesh: ms.screwHeads, color: [0.62, 0.65, 0.69], alpha: 1, edge: [0, 0, 0, 0], layer: 2.6, zc: 2 * pt + st },
+      { screw: true, mesh: ms.screwNuts, color: [0.55, 0.58, 0.62], alpha: 1, edge: [0, 0, 0, 0], layer: -0.6, zc: 0 },
     ], bb);
     P2.updatePhoto(p);
     const key = Geo.bbox(fig).w.toFixed(1) + ',' + Geo.bbox(fig).h.toFixed(1); if (key !== P2.figKey) { P2.figKey = key; P2.lvOK = false; }
@@ -465,10 +494,12 @@ P2.silhouetteCanvas = function () {
   const b = Geo.bbox(P1.line), pad = 1, x0 = b.x0 - pad, y0 = b.y0 - pad, x1 = b.x1 + pad, y1 = b.y1 + pad;
   const k = Math.min(10, 2048 / Math.max(x1 - x0, y1 - y0)); // px per mm
   const c = document.createElement('canvas'); c.width = Math.max(2, Math.round((x1 - x0) * k)); c.height = Math.max(2, Math.round((y1 - y0) * k));
-  const x = c.getContext('2d'); x.beginPath();
-  P1.line.forEach(([mx, my], i) => { const X = (mx - x0) * k, Y = (my - y0) * k; i ? x.lineTo(X, Y) : x.moveTo(X, Y); });
-  x.closePath(); x.fillStyle = 'rgba(52, 78, 66, 0.62)'; x.fill();
-  x.lineJoin = 'round'; x.lineCap = 'round'; x.lineWidth = Math.max(3, 0.8 * k); x.setLineDash([2.2 * k, 1.4 * k]); x.strokeStyle = 'rgba(12, 24, 18, 1)'; x.stroke(); x.setLineDash([]);
+  const x = c.getContext('2d'); const outline = new Path2D();
+  P1.line.forEach(([mx, my], i) => { const X = (mx - x0) * k, Y = (my - y0) * k; i ? outline.lineTo(X, Y) : outline.moveTo(X, Y); });
+  outline.closePath(); x.fillStyle = 'rgba(18, 82, 96, 0.55)'; x.fill(outline);
+  x.save(); x.clip(outline); x.strokeStyle = 'rgba(6, 30, 36, 0.45)'; x.lineWidth = Math.max(1, 0.25 * k); x.beginPath(); // 45° hatch, 1.5 mm apart
+  for (let d = -c.height; d < c.width; d += 1.5 * k) { x.moveTo(d, c.height); x.lineTo(d + c.height, 0); } x.stroke(); x.restore();
+  x.lineJoin = 'round'; x.lineCap = 'round'; x.lineWidth = Math.max(3, 0.8 * k); x.setLineDash([2.2 * k, 1.4 * k]); x.strokeStyle = 'rgba(4, 22, 26, 1)'; x.stroke(outline); x.setLineDash([]);
   return { canvas: c, x0, y0, x1, y1 };
 };
 P2.updatePhoto = function (p) {
@@ -526,7 +557,7 @@ P2.drawLayout = function () {
   const cut = css('--cut'), eng = css('--engrave'), ink = css('--mat-ink');
   const poly = (l, stroke, w, fill, dash) => { if (!l) return; c.beginPath(); l.forEach(([x, y], i) => { const [X, Y] = T(x, y); i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.closePath(); if (fill) { c.fillStyle = fill; c.fill(); } if (stroke) { c.setLineDash(dash || []); c.strokeStyle = stroke; c.lineWidth = w * dpr; c.stroke(); c.setLineDash([]); } };
   poly(cs.lines.outer, null, 0, 'rgba(225,240,250,0.10)');
-  poly(cs.lines.figure, null, 0, 'rgba(120,200,140,0.22)');
+  poly(cs.lines.figure, null, 0, 'rgba(120,220,235,0.22)');
   if (cs.analysis) poly(cs.analysis.path, ink, 1, null, [5 * dpr, 4 * dpr]);
   if (cs.grooves) { poly(cs.grooves.inner, eng, 1.5); poly(cs.grooves.outer, eng, 1.5); }
   poly(cs.lines.outer, cut, 2); poly(cs.lines.cavity, cut, 2);
@@ -606,5 +637,15 @@ function zoomBy(k) {
   else { const v = P2.lv; P2.lv = { s: v.s * k, tx: x - (x - v.tx) * k, ty: y - (y - v.ty) * k }; P2.drawLayout(); }
 }
 new ResizeObserver(() => { if (phase === 1) P1.resize(); else P2.show(); }).observe(stage);
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { P1.draw(); if (P2.cs) P2.show(); });
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { P1.draw(); if (P2.cs) P2.show(); setThemeLabel(); });
+// Light / dark switch: starts from the system setting; a choice is remembered in this browser.
+const isDark = () => document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+const setThemeLabel = () => { $('#themeBtn').textContent = isDark() ? '☀ Light mode' : '☾ Dark mode'; };
+try { const t = localStorage.getItem('shadowbox-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (_) {}
+$('#themeBtn').addEventListener('click', () => {
+  const t = isDark() ? 'light' : 'dark'; document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('shadowbox-theme', t); } catch (_) {}
+  setThemeLabel(); P1.draw(); if (P2.cs) P2.show();
+});
+setThemeLabel();
 setPhase(1);

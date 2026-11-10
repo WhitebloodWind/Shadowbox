@@ -567,9 +567,9 @@ P1.draw = function () {
     const r = Math.max(1, num('#brush') / P1.unit() * P1.view.s) * dpr; const add = P1.eraseMode !== 'remove';
     c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
     c.beginPath(); c.arc(x * dpr, y * dpr, r, 0, Math.PI * 2);
-    c.fillStyle = add ? 'rgba(224,55,42,0.18)' : 'rgba(60,190,120,0.18)'; c.fill();
+    c.fillStyle = add ? 'rgba(224,55,42,0.18)' : 'rgba(80,210,230,0.20)'; c.fill();
     c.lineWidth = 3 * dpr; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.stroke();
-    c.lineWidth = 1.5 * dpr; c.strokeStyle = add ? '#FF6B5E' : '#5EE09A'; c.stroke();
+    c.lineWidth = 1.5 * dpr; c.strokeStyle = add ? '#FF6B5E' : '#6FE3F2'; c.stroke();
     c.beginPath(); c.moveTo(x * dpr - 4 * dpr, y * dpr); c.lineTo(x * dpr + 4 * dpr, y * dpr); c.moveTo(x * dpr, y * dpr - 4 * dpr); c.lineTo(x * dpr, y * dpr + 4 * dpr);
     c.lineWidth = 1.5 * dpr; c.strokeStyle = '#fff'; c.stroke();
     c.font = `600 ${11 * dpr}px Archivo, sans-serif`; c.fillStyle = '#fff'; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 3 * dpr;

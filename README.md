@@ -1,4 +1,4 @@
-# ShadowBox
+# Shadowbox
 
 Turn a photo of a flat object into a cut-ready outline, then into a laser-cut acrylic case (acrylic, spacer, acrylic). Everything runs in the browser with classic image processing: no AI, no server.
 

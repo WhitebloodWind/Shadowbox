@@ -9,6 +9,7 @@ const CaseGen = (() => {
   };
   const LENGTHS = [4, 5, 6, 8, 10, 12, 14, 16, 20, 25, 30];
 
+  const RING_GAP = 2.2, RING_TAB = 2.8; // hole edge to window; acrylic left round the hole
   function build(fig, p) {
     const G = Geo;
     const bb = G.bbox(fig);
@@ -27,9 +28,9 @@ const CaseGen = (() => {
       const at = cl && cl.length > 3 ? edgePoint(cl, p.keyringPos, cavS, g) : null;
       if (!at) { warnings.push('Couldn’t place the keyring hole there. Click the case again to move it.'); }
       else {
-        const off = ringR + 2.2, x = at.x + at.nx * off, cy = at.y + at.ny * off;
+        const off = ringR + RING_GAP, x = at.x + at.nx * off, cy = at.y + at.ny * off;
         ring = { x, y: cy, d: p.keyringD };
-        const tab = G.circleField(g, x, cy, ringR + 2.8);
+        const tab = G.circleField(g, x, cy, ringR + RING_TAB);
         outerS = G.closing(G.fmax(outerS, tab), g.W, g.H, sc, 2);
       }
     }
@@ -179,6 +180,11 @@ const CaseGen = (() => {
     return best;
   }
 
+  function ringAt(cs, x, y, d) {
+    const at = edgePoint(cs.lines.cavity, edgeParam(cs.lines.cavity, x, y), cs.fields.cavS, cs.g); if (!at) return null;
+    const off = d / 2 + RING_GAP; return { x: at.x + at.nx * off, y: at.y + at.ny * off, d, tab: d / 2 + RING_TAB };
+  }
+
   function meshes(cs, p) {
     const G = Geo; const { g, fields, holes, grooves } = cs;
     const bbo = G.bbox(cs.lines.outer);
@@ -229,6 +235,6 @@ const CaseGen = (() => {
     }
     return out;
   }
-  return { build, meshes, edgeParam, spanLimit, SPAN, SCREWS };
+  return { build, meshes, edgeParam, ringAt, spanLimit, SPAN, SCREWS };
 })();
 if (typeof module !== 'undefined') module.exports = CaseGen;
