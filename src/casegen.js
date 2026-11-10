@@ -23,14 +23,11 @@ const CaseGen = (() => {
     // keyring
     let ring = null;
     if (p.keyring) {
-      const cbb = G.bbox(fig);
-      const x = cbb.x0 + p.keyringPos * cbb.w;
-      const i = Math.min(g.W - 1, Math.max(0, Math.floor((x - g.ox) * g.res)));
-      let topY = null;
-      for (let j = 0; j < g.H; j++) if (cavS[j * g.W + i] > 0) { topY = g.oy + (j + 0.5) / g.res; break; }
-      if (topY === null) { warnings.push('Keyring position is outside the outline. Move the slider.'); }
+      const cl = G.largestLoopMM(cavS, g);
+      const at = cl && cl.length > 3 ? edgePoint(cl, p.keyringPos, cavS, g) : null;
+      if (!at) { warnings.push('Couldn’t place the keyring hole there. Click the case again to move it.'); }
       else {
-        const cy = topY - (ringR + 2.2);
+        const off = ringR + 2.2, x = at.x + at.nx * off, cy = at.y + at.ny * off;
         ring = { x, y: cy, d: p.keyringD };
         const tab = G.circleField(g, x, cy, ringR + 2.8);
         outerS = G.closing(G.fmax(outerS, tab), g.W, g.H, sc, 2);
@@ -51,7 +48,7 @@ const CaseGen = (() => {
       fields.grooveS = G.fmin(g2, G.neg(g1));
       if (p.grooveOffset + p.grooveWidth > p.border - 1.5) warnings.push('The groove sits too close to the outer edge. Reduce its distance or widen the border.');
       if (p.grooveDepth * 2 >= p.spacerT) warnings.push('Grooves on both faces would nearly cut through the spacer. Make them shallower.');
-    } else {
+    } else if (p.join === 'screws') {
       analysis = placeScrews(g, cavS, outerS, ring, p);
       for (const s of analysis.screws) holes.push({ x: s.x, y: s.y, d: SCREWS[p.screw].hole, kind: 'screw', n: s.n });
       warnings.push(...analysis.warnings);
@@ -60,6 +57,18 @@ const CaseGen = (() => {
     else if (p.spacerT - p.figT > 1.5) warnings.push('The object can rattle: the spacer is much thicker than the object.');
     return { g, fields, lines, holes, grooves, analysis, warnings, params: { ...p } };
   }
+
+  /* Longest span allowed between two screws.
+     Each stretch of plate between neighbouring screws is treated as a beam clamped at both ends
+     (width = border, thickness = plate). A firm 2 N press at mid-span may open the edge by at most
+     0.15 mm: delta = F L^3 / (192 E I)  ->  L = cbrt(192 E I delta / F). Cast acrylic E = 3200 MPa. */
+  const SPAN = { E: 3200, F: 2, delta: 0.15 };
+  function spanLimit(p) {
+    const w = Math.max(2, p.border), t = Math.max(0.5, p.plateT), I = w * t ** 3 / 12;
+    return Math.min(150, Math.max(15, Math.cbrt(192 * SPAN.E * I * SPAN.delta / SPAN.F)));
+  }
+  function inside(poly, x, y) { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
+  function centroid(loop) { let a = 0, cx = 0, cy = 0; for (let i = 0; i < loop.length; i++) { const [x0, y0] = loop[i], [x1, y1] = loop[(i + 1) % loop.length]; const f = x0 * y1 - x1 * y0; a += f; cx += (x0 + x1) * f; cy += (y0 + y1) * f; } return a ? [cx / (3 * a), cy / (3 * a)] : [0, 0]; }
 
   function placeScrews(g, cavS, outerS, ring, p) {
     const G = Geo;
@@ -81,8 +90,11 @@ const CaseGen = (() => {
     let longest = 0, run = 0; for (let k = 0; k < 2 * n; k++) { if (!valid[k % n]) { run++; longest = Math.max(longest, run); } else run = 0; }
     longest = Math.min(longest, n) * 0.5;
     let best = null;
-    const minN = Math.max(p.minScrews, Math.ceil(L / p.spacing));
-    for (let N = minN; N <= minN + 8 && N <= 60; N++) {
+    // Fewest screws: start from the count the span limit demands and add screws until every gap fits,
+    // every screw has room, and the screws surround the middle of the case so the plates can't rock.
+    const S = spanLimit(p); const mid = centroid(path);
+    const minN = Math.max(3, p.minScrews || 3, Math.ceil(L / S));
+    for (let N = minN; N <= minN + 12 && N <= 60; N++) {
       let bestPhase = null;
       for (let ph = 0; ph < 32; ph++) {
         const idx = [];
@@ -105,18 +117,66 @@ const CaseGen = (() => {
       const idx = bestPhase.idx.slice().sort((a, b) => a - b);
       const gaps = idx.map((v, k) => (((idx[(k + 1) % idx.length] - v) + n) % n || n) * 0.5);
       const maxGap = gaps.length ? Math.max(...gaps) : L;
-      best = { N, idx, gaps, maxGap, ok: bestPhase.ok };
-      if (bestPhase.ok && maxGap <= p.spacing * 1.15) break;
+      const ring2 = idx.map(q => path[q]); const surrounds = idx.length >= 3 && inside(ring2, mid[0], mid[1]);
+      best = { N, idx, gaps, maxGap, ok: bestPhase.ok, surrounds };
+      if (bestPhase.ok && maxGap <= S * 1.05 && surrounds) break;
     }
     const screws = best.idx.map((q, k) => ({ x: path[q][0], y: path[q][1], n: k + 1, clearance: clearance[q] }));
     const minClear = screws.length ? Math.min(...screws.map(s => s.clearance)) : 0;
     if (validFrac < 0.6) warnings.push(`The border is too narrow for ${p.screw} holes along much of the outline. A border of about ${(2 * (hr + m) + 1).toFixed(1)} mm leaves room everywhere.`);
-    if (best.maxGap > p.spacing * 1.15) warnings.push(`One gap between screws is ${best.maxGap.toFixed(0)} mm, longer than your ${p.spacing} mm limit, because the border is too narrow there. Widen the border or accept the gap.`);
+    if (best.maxGap > S * 1.05) warnings.push(`One gap between screws is ${best.maxGap.toFixed(0)} mm, longer than the ${S.toFixed(0)} mm the plates can span, because the border is too narrow there. Widen the border or use thicker acrylic.`);
     if (!best.ok) warnings.push('Some screws could not be placed. Widen the border or use a smaller screw.');
     const stack = 2 * p.plateT + p.spacerT;
     const need = stack + spec.washer + spec.nut + 0.5;
-    const length = LENGTHS.find(l => l >= need) || Math.ceil(need);
-    return { screws, path, gaps: best.gaps, maxGap: best.maxGap, minClear, pathLength: L, spec, length, stack, validFrac, longestInvalid: longest, warnings };
+    let length = LENGTHS.find(l => l >= need) || Math.ceil(need);
+    // Counterbores: a round pocket in the front plate for the head, a hex pocket in the back plate for the nut.
+    let cb = null;
+    if (p.counterbore) {
+      cb = { headD: spec.head + 0.4, headDepth: spec.headH + 0.1, nutR: spec.nutW / Math.sqrt(3) + 0.15, nutDepth: spec.nut + 0.1 };
+      const deepest = Math.max(cb.headDepth, cb.nutDepth), left = p.plateT - deepest;
+      if (left < 0.8) warnings.push(`Flush ${p.screw} heads and nuts need pockets ${deepest.toFixed(1)} mm deep, which leaves only ${Math.max(0, left).toFixed(1)} mm of the ${p.plateT} mm plates. Use plates at least ${(deepest + 0.8).toFixed(1)} mm thick, or a smaller screw.`);
+      // From the head seat, the screw should end inside the nut (at least 80% engaged) without poking out of the back.
+      const reach = stack - cb.headDepth, shortest = reach - 0.1 - 0.2 * spec.nut;
+      const fit = LENGTHS.filter(l => l >= shortest && l <= reach + 1e-9);
+      if (fit.length) { length = fit[fit.length - 1]; cb.trim = null; }
+      else { length = LENGTHS.find(l => l >= reach) || Math.ceil(reach); cb.trim = Math.floor(reach * 2) / 2; warnings.push(`No stock ${p.screw} screw ends flush with this stack. Buy ${length} mm screws and cut them to ${cb.trim} mm.`); }
+      const pocketR = Math.max(cb.headD / 2, cb.nutR);
+      const tight = screws.filter(s => s.clearance + hr - pocketR < 0.6).length;
+      if (tight) warnings.push(`${tight} of the counterbores come within 0.6 mm of an edge. Widen the border or use a smaller screw.`);
+      cb.reach = reach;
+    }
+    return { screws, path, gaps: best.gaps, maxGap: best.maxGap, span: S, cb, minClear, pathLength: L, spec, length, stack, validFrac, longestInvalid: longest, warnings };
+  }
+
+  // The window edge as a path that starts at its topmost point and runs one fixed way round,
+  // so a fraction 0..1 names a spot on the edge.
+  function edgePath(loop) {
+    let pts = loop.slice(); if (Geo.area(pts) < 0) pts.reverse();
+    let top = 0; for (let i = 1; i < pts.length; i++) if (pts[i][1] < pts[top][1] - 1e-9 || (Math.abs(pts[i][1] - pts[top][1]) < 1e-9 && Math.abs(pts[i][0]) < Math.abs(pts[top][0]))) top = i;
+    pts = pts.slice(top).concat(pts.slice(0, top));
+    const cum = [0]; for (let i = 1; i <= pts.length; i++) { const a = pts[i - 1], b = pts[i % pts.length]; cum.push(cum[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+    return { pts, cum, L: cum[pts.length] };
+  }
+  function edgePoint(loop, t, cavS, g) {
+    const { pts, cum, L } = edgePath(loop); const n = pts.length; if (!(L > 0)) return null;
+    const s = ((t % 1) + 1) % 1 * L; let i = 0; while (i < n - 1 && cum[i + 1] < s) i++;
+    const a = pts[i], b = pts[(i + 1) % n], f = (s - cum[i]) / ((cum[i + 1] - cum[i]) || 1);
+    const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f;
+    const k = Math.max(2, Math.round(n / 120)); const P = pts[(i - k + n) % n], Q = pts[(i + 1 + k) % n];
+    let nx = Q[1] - P[1], ny = -(Q[0] - P[0]); const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+    // the field is positive inside the window, so outward is the way it falls
+    if (Geo.sample(cavS, g, x + nx * 0.5, y + ny * 0.5) > Geo.sample(cavS, g, x - nx * 0.5, y - ny * 0.5)) { nx = -nx; ny = -ny; }
+    return { x, y, nx, ny };
+  }
+  // The fraction along the window edge nearest to a point (inverse of edgePoint).
+  function edgeParam(loop, x, y) {
+    const { pts, cum, L } = edgePath(loop); let best = 0, bd = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length], dx = b[0] - a[0], dy = b[1] - a[1];
+      const f = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+      const d = Math.hypot(a[0] + dx * f - x, a[1] + dy * f - y); if (d < bd) { bd = d; best = (cum[i] + f * (cum[i + 1] - cum[i])) / L; }
+    }
+    return best;
   }
 
   function meshes(cs, p) {
@@ -129,31 +189,46 @@ const CaseGen = (() => {
     const spacerF = (x, y) => Math.min(outer(x, y), -cav(x, y), holeField(x, y));
     const pt = p.plateT, st = p.spacerT;
     const out = {};
-    out.back = G.extrude(plateF, bbo, 0, pt);
+    const cb = cs.analysis && cs.analysis.cb; const scr = cs.analysis ? cs.analysis.screws : [];
+    // pocket fields: positive where the plate stays solid
+    const headF = (x, y) => { let v = 1e3; for (const s of scr) v = Math.min(v, Math.hypot(x - s.x, y - s.y) - cb.headD / 2); return v; };
+    const HEXN = [30, 90, 150].map(a => [Math.cos(a * Math.PI / 180), Math.sin(a * Math.PI / 180)]);
+    const nutF = (x, y) => { let v = 1e3; for (const s of scr) { const dx = x - s.x, dy = y - s.y; v = Math.min(v, Math.max(...HEXN.map(([a, b]) => Math.abs(dx * a + dy * b))) - cb.nutR * Math.cos(Math.PI / 6)); } return v; };
+    out.back = cb ? G.mergeMeshes([G.extrude((x, y) => Math.min(plateF(x, y), nutF(x, y)), bbo, 0, cb.nutDepth), G.extrude(plateF, bbo, cb.nutDepth, pt)]) : G.extrude(plateF, bbo, 0, pt);
     if (grooves) {
       const gr = (x, y) => G.sample(fields.grooveS, g, x, y);
       const sg = (x, y) => Math.min(spacerF(x, y), -gr(x, y));
       const d = Math.min(grooves.depth, st / 2 - 0.05);
       out.spacer = G.mergeMeshes([G.extrude(sg, bbo, pt, pt + d), G.extrude(spacerF, bbo, pt + d, pt + st - d), G.extrude(sg, bbo, pt + st - d, pt + st)]);
     } else out.spacer = G.extrude(spacerF, bbo, pt, pt + st);
-    out.front = G.extrude(plateF, bbo, pt + st, 2 * pt + st);
+    out.front = cb ? G.mergeMeshes([G.extrude(plateF, bbo, pt + st, 2 * pt + st - cb.headDepth), G.extrude((x, y) => Math.min(plateF(x, y), headF(x, y)), bbo, 2 * pt + st - cb.headDepth, 2 * pt + st)]) : G.extrude(plateF, bbo, pt + st, 2 * pt + st);
     const fb = G.bbox(cs.lines.figure);
     out.figure = G.extrude((x, y) => G.sample(fields.figS, g, x, y), fb, pt, pt + p.figT);
     if (cs.analysis) {
       const sp = cs.analysis.spec; const top = 2 * pt + st;
-      const parts = [];
+      const parts = [], top_ = [], bottom = [];
       for (const s of cs.analysis.screws) {
         const r = (sp.hole - 0.2) / 2;
-        parts.push(G.cylinder(s.x, s.y, r, -sp.washer - sp.nut - 0.5, top + sp.washer + 0.01));
-        parts.push(G.cylinder(s.x, s.y, sp.head / 2, top + sp.washer, top + sp.washer + sp.headH));
-        parts.push(G.cylinder(s.x, s.y, sp.nutW / 2, -sp.washer - sp.nut, -sp.washer, 6));
-        parts.push(G.cylinder(s.x, s.y, sp.head / 2 + 0.3, top, top + sp.washer));
-        parts.push(G.cylinder(s.x, s.y, sp.head / 2 + 0.3, -sp.washer, 0));
+        if (cb) { // head and nut sunk into their pockets
+          const seat = top - cb.headDepth, L = cb.trim || cs.analysis.length;
+          top_.push(G.cylinder(s.x, s.y, r, Math.max(0.02, seat - L), seat + 0.01));
+          top_.push(G.cylinder(s.x, s.y, sp.head / 2, seat, seat + sp.headH));
+          bottom.push(G.cylinder(s.x, s.y, sp.nutW / Math.sqrt(3), cb.nutDepth - sp.nut, cb.nutDepth, 6));
+          continue;
+        }
+        top_.push(G.cylinder(s.x, s.y, r, -sp.washer - sp.nut - 0.5, top + sp.washer + 0.01));
+        top_.push(G.cylinder(s.x, s.y, sp.head / 2, top + sp.washer, top + sp.washer + sp.headH));
+        top_.push(G.cylinder(s.x, s.y, sp.head / 2 + 0.3, top, top + sp.washer));
+        bottom.push(G.cylinder(s.x, s.y, sp.nutW / 2, -sp.washer - sp.nut, -sp.washer, 6));
+        bottom.push(G.cylinder(s.x, s.y, sp.head / 2 + 0.3, -sp.washer, 0));
       }
+      parts.push(...top_, ...bottom);
       out.screws = parts.length ? G.mergeMeshes(parts) : null;
+      out.screwHeads = top_.length ? G.mergeMeshes(top_) : null; // screw + top washer: rides up with the front plate
+      out.screwNuts = bottom.length ? G.mergeMeshes(bottom) : null; // nut + bottom washer: drops with the back plate
     }
     return out;
   }
-  return { build, meshes, SCREWS };
+  return { build, meshes, edgeParam, spanLimit, SPAN, SCREWS };
 })();
 if (typeof module !== 'undefined') module.exports = CaseGen;

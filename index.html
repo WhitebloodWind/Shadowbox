@@ -71,6 +71,8 @@ aside{border-right:1px solid var(--line);background:var(--panel);overflow:auto;m
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--panel-2);padding:8px 13px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.exp{transition:background-color .15s,color .15s,border-color .15s}
+.btn.exp:hover,.btn.exp:focus-visible{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btns{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px}
 .readout{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13.5px;margin:12px 0}
@@ -93,6 +95,15 @@ table.bom td.q{text-align:right;font-weight:650}
 .viewtabs .seg{margin:0;background:var(--panel)}
 .explode{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:0 10px;height:34px;font-size:13px}
 .explode input{accent-color:var(--accent);width:110px}
+.viewtabs{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 200px)}
+.cubebox{position:absolute;right:14px;bottom:46px;width:120px;height:120px}
+#cube{width:120px;height:120px;cursor:pointer;display:block}
+#cubeHome{position:absolute;left:-6px;bottom:-6px;width:26px;height:26px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;font-size:14px;line-height:1;padding:0}
+.navhint{padding-right:130px}
+#photoBox{cursor:pointer;user-select:none}#photoBox input{width:auto;margin:0}
+.navhint{position:absolute;left:14px;bottom:12px;right:14px;font-size:12px;color:var(--muted, #8a9a90);pointer-events:none;line-height:1.5}
+.navhint b{font-weight:600;color:var(--ink, inherit)}
+@media (max-width:700px){.navhint .alt{display:none}}
 .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--mat-ink);padding:24px}
 .empty[hidden]{display:none}
 .empty .card{max-width:420px}
@@ -173,7 +184,11 @@ input[type=file]{display:none}
             <div class="btns"><button class="btn primary" id="traceBtn">Trace outline</button></div>
             <div class="seg" id="toolSeg"><button data-v="edit" aria-pressed="true">Edit points</button><button data-v="pick" aria-pressed="false">Pick object</button><button data-v="erase" aria-pressed="false">Erase</button></div>
             <p class="hint" id="toolHint">Drag a point to move it. Double-click the line to add a point. Select a point and press Delete to remove it.</p>
-            <div class="row" id="brushRow" hidden><label for="brush">Eraser size</label><input type="range" id="brush" min="0.5" max="15" step="0.5" value="3"><span class="val" id="brushV">3 mm</span></div>
+            <div id="brushRow" hidden>
+              <div class="seg" id="eraseSeg"><button data-v="add" aria-pressed="true">Erase</button><button data-v="remove" aria-pressed="false">Restore</button></div>
+              <div class="row"><label for="brush">Brush size</label><input type="range" id="brush" min="0.5" max="15" step="0.5" value="3"><span class="val" id="brushV">3 mm</span></div>
+              <div class="btns"><button class="btn" id="undoErase" disabled>Undo stroke</button><button class="btn" id="redoErase" disabled>Redo</button></div>
+            </div>
             <div class="row"><label for="thr">Threshold</label><input type="range" id="thr" min="0.05" max="0.95" step="0.01" value="0.5"><span class="val" id="thrV">auto</span></div>
             <label class="check"><input type="checkbox" id="thrAuto" checked>Pick the threshold automatically</label>
             <label class="check"><input type="checkbox" id="dark" checked>Object is darker than the background</label>
@@ -183,7 +198,7 @@ input[type=file]{display:none}
             <p class="hint">Raise “Cut off thin attachments” to drop chains, strings or keyrings joined to the object.</p>
             <div class="row"><label for="detail">Point spacing tolerance</label><input type="number" id="detail" value="0.5" min="0.05" step="0.05"><span class="val">mm</span></div>
             <label class="check"><input type="checkbox" id="smooth" checked>Smooth curve through points</label>
-            <div class="btns"><button class="btn" id="delPt" disabled>Delete point</button><button class="btn" id="clearErase">Clear erasing</button></div>
+            <div class="btns"><button class="btn" id="delPt" disabled>Delete point</button><button class="btn" id="clearErase">Clear all erasing</button></div>
             <div class="readout" id="traceInfo" hidden></div>
           </div>
         </section>
@@ -202,10 +217,10 @@ input[type=file]{display:none}
             <p>Choose the lines to include in the file.</p>
             <div id="expLines"></div>
             <div class="btns">
-              <button class="btn" data-exp="svg">SVG</button>
-              <button class="btn" data-exp="dxf">DXF</button>
-              <button class="btn" data-exp="pdf">PDF, 1:1 print</button>
-              <button class="btn" data-exp="json">Points (JSON)</button>
+              <button class="btn exp" data-exp="svg">SVG</button>
+              <button class="btn exp" data-exp="dxf">DXF</button>
+              <button class="btn exp" data-exp="pdf">PDF, 1:1 print</button>
+              <button class="btn exp" data-exp="json">Points (JSON)</button>
             </div>
             <p class="hint">All files are in millimetres. DXF downloads inside a .zip. Print the PDF at 100% and check the 50 mm bar to confirm scale.</p>
             <div class="btns"><button class="btn primary" id="toCase">Build a case from this outline</button></div>
@@ -214,42 +229,35 @@ input[type=file]{display:none}
       </div>
       <!-- PHASE 2 -->
       <div class="phase-panel" id="panel2" hidden>
-        <section class="step open" data-step="1">
-          <button class="head"><span class="num">1</span><span class="title">Choose the outline</span><span class="sub" id="t1sub"></span></button>
+        <section class="step open" data-step="2">
+          <button class="head"><span class="num">1</span><span class="title">Layers and fit</span><span class="sub" id="t2sub"></span></button>
           <div class="body">
-            <div class="seg" id="srcSeg"><button data-v="traced" aria-pressed="true">Traced</button><button data-v="enlarged" aria-pressed="false">Enlarged</button><button data-v="import" aria-pressed="false">Imported</button></div>
-            <div class="row" id="enlPickRow" hidden><label for="enlPick">Enlarged line</label><select id="enlPick"></select></div>
             <p class="hint" id="srcHint"></p>
-            <div class="btns"><label class="btn" for="file2">Import SVG or DXF</label><input type="file" id="file2" accept=".svg,.dxf,image/svg+xml"><button class="btn" id="sample">Use a sample shape</button></div>
-            <div class="row"><label for="impScale">Scale imported file</label><input type="number" id="impScale" value="1" min="0.001" step="0.01"><span class="val">×</span></div>
-            <p class="hint">The case builder treats this line as the edge of your object and adds the gap itself.</p>
-          </div>
-        </section>
-        <section class="step" data-step="2">
-          <button class="head"><span class="num">2</span><span class="title">Layers and fit</span><span class="sub" id="t2sub"></span></button>
-          <div class="body">
             <div class="row"><label for="figT">Object thickness</label><input type="number" id="figT" value="1" min="0.1" step="0.1"><span class="val">mm</span></div>
             <div class="row"><label for="clear">Gap around object</label><input type="number" id="clear" value="1" min="0" step="0.1"><span class="val">mm</span></div>
             <div class="row"><label for="border">Border width</label><input type="number" id="border" value="6.5" min="2" step="0.5"><span class="val">mm</span></div>
-            <div class="row"><label for="plateT">Front and back acrylic</label><select id="plateT"><option>1.5</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select><span class="val">mm</span></div>
-            <div class="row"><label for="spacerT">Spacer acrylic</label><select id="spacerT"><option>1</option><option selected>1.5</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select><span class="val">mm</span></div>
+            <div class="row"><label for="plateT">Front and back acrylic</label><input type="number" id="plateT" value="2" min="0.5" step="0.1"><span class="val">mm</span></div>
+            <div class="row"><label for="spacerT">Spacer acrylic</label><input type="number" id="spacerT" value="1.5" min="0.5" step="0.1"><span class="val">mm</span></div>
             <div class="row"><label for="cornerR">Inside corner radius</label><input type="number" id="cornerR" value="1.5" min="0" step="0.5"><span class="val">mm</span></div>
-            <label class="check"><input type="checkbox" id="keyring" checked>Add a keyring hole</label>
-            <div id="keyRows">
+            <label class="check"><input type="checkbox" id="keyring">Add a keyring hole</label>
+            <div id="keyRows" hidden>
               <div class="row"><label for="keyD">Hole diameter</label><input type="number" id="keyD" value="4" min="1.5" step="0.5"><span class="val">mm</span></div>
-              <div class="row"><label for="keyPos">Position, left to right</label><input type="range" id="keyPos" min="0" max="1" step="0.01" value="0.5"></div>
+              <p class="hint" id="keyHint">Click where you want the hole on the 3D model or the cut layout. It goes on the nearest edge.</p>
+              <div class="btns"><button class="btn" id="keyPlace" aria-pressed="false">Move the hole</button></div>
             </div>
           </div>
         </section>
         <section class="step" data-step="3">
-          <button class="head"><span class="num">3</span><span class="title">Join the layers</span><span class="sub" id="t3sub"></span></button>
+          <button class="head"><span class="num">2</span><span class="title">Join the layers</span><span class="sub" id="t3sub"></span></button>
           <div class="body">
-            <div class="seg" id="joinSeg"><button data-v="screws" aria-pressed="true">Screws</button><button data-v="solvent" aria-pressed="false">Solvent cement</button></div>
-            <div id="screwRows">
+            <div class="seg" id="joinSeg"><button data-v="none" aria-pressed="true">Not yet</button><button data-v="screws" aria-pressed="false">Screws</button><button data-v="solvent" aria-pressed="false">Solvent cement</button></div>
+            <p class="hint" id="noneRows">The case is shown without screws or grooves. Pick a join method when you’re ready.</p>
+            <div id="screwRows" hidden>
               <div class="row"><label for="screw">Screw size</label><select id="screw"><option>M2</option><option>M2.5</option><option>M3</option><option>M4</option></select></div>
-              <div class="row"><label for="spacing">Longest gap between screws</label><input type="number" id="spacing" value="50" min="10" step="1"><span class="val">mm</span></div>
               <div class="row"><label for="minScrews">Fewest screws</label><input type="number" id="minScrews" value="3" min="2" step="1"><span class="val"></span></div>
               <div class="row"><label for="edge">Material beside each hole</label><input type="number" id="edge" value="2" min="0.5" step="0.1"><span class="val">mm</span></div>
+              <label class="check"><input type="checkbox" id="cbore">Counterbore so heads and nuts sit flush</label>
+              <p class="hint" id="cboreHint" hidden>A round pocket is engraved into the front plate for each head and a hex pocket into the back plate for each nut, so both faces are flat. Washers are left out.</p>
             </div>
             <div id="solventRows" hidden>
               <p>A shallow groove engraved around the window on both faces of the spacer stops solvent wicking into the window and clouding it.</p>
@@ -262,15 +270,16 @@ input[type=file]{display:none}
           </div>
         </section>
         <section class="step" data-step="4">
-          <button class="head"><span class="num">4</span><span class="title">Parts and export</span><span class="sub"></span></button>
+          <button class="head"><span class="num">3</span><span class="title">Parts and export</span><span class="sub"></span></button>
           <div class="body">
             <table class="bom" id="bom"></table>
             <div class="btns">
-              <button class="btn primary" data-exp2="laser">Laser files (.zip)</button>
-              <button class="btn" data-exp2="stl">3D parts (.zip)</button>
-              <button class="btn" data-exp2="csv">Parts list (.csv)</button>
+              <button class="btn exp" data-exp2="all">Everything (.zip)</button>
+              <button class="btn exp" data-exp2="laser">Laser files (.zip)</button>
+              <button class="btn exp" data-exp2="stl">3D parts (.zip)</button>
+              <button class="btn exp" data-exp2="csv">Parts list (.csv)</button>
             </div>
-            <p class="hint">Laser files are DXF and SVG in millimetres, with cuts in red and engraving in blue. Both plates are on one sheet.</p>
+            <p class="hint">Everything puts the laser files, 3D parts and parts list in one zip, each in its own folder. Laser files are DXF and SVG in millimetres, with cuts in red and engraving in blue. Both plates are on one sheet.</p>
           </div>
         </section>
       </div>
@@ -281,13 +290,16 @@ input[type=file]{display:none}
       <canvas id="cv3" hidden aria-label="3D model"></canvas>
       <div class="hud" id="hud"></div>
       <div class="viewtabs" id="viewtabs" hidden>
+        <label class="explode" id="photoBox" hidden><input type="checkbox" id="showPhoto" checked>Silhouette</label>
         <div class="explode" id="explodeBox"><label for="explode">Explode</label><input type="range" id="explode" min="0" max="1" step="0.01" value="0.35"></div>
         <div class="seg" id="viewSeg"><button data-v="3d" aria-pressed="true">3D model</button><button data-v="layout" aria-pressed="false">Cut layout</button></div>
       </div>
+      <div class="cubebox" id="cubeBox" hidden><canvas id="cube" title="Click a face, edge or corner to look from there. Drag to orbit. Arrows step to the next face or turn the view." aria-label="View cube"></canvas><button id="cubeHome" title="Home view" aria-label="Home view">⌂</button></div>
+      <div class="navhint" id="navHint" hidden><b>Middle drag</b> pan · <b>Shift + middle drag</b> orbit · <b>Scroll</b> or <b>pinch</b> zoom at cursor · <b>Two-finger drag</b> pan · <b>Double-click middle</b> fit<span class="alt"> · Left drag also orbits, right drag also pans</span></div>
       <div class="legend" id="legend" hidden><span><i style="color:var(--cut)"></i>Cut</span><span id="legEng"><i style="color:var(--engrave)"></i>Engrave</span><span id="legScrew"><i style="color:var(--mat-ink);border-top-style:dashed"></i>Screw line</span></div>
       <div class="tools" id="tools"><button id="zoomOut" aria-label="Zoom out">−</button><button id="zoomFit" aria-label="Fit to view">Fit</button><button id="zoomIn" aria-label="Zoom in">+</button></div>
       <div class="empty" id="empty1"><div class="card"><h2>Trace any flat object into a cut-ready outline</h2><p>Upload a photo with a ruler or grid paper in the shot. Everything runs in your browser.</p><label class="btn" for="file1">Choose photo</label></div></div>
-      <div class="empty" id="empty2" hidden><div class="card"><h2>No outline yet</h2><p>Trace one in the Outline tab, import an SVG or DXF, or try a sample shape.</p><button class="btn" id="sample2">Use a sample shape</button></div></div>
+      <div class="empty" id="empty2" hidden><div class="card"><h2>No outline yet</h2><p>The case is built from the traced outline. Set the scale and trace your object in the Outline tab first.</p><button class="btn" id="toOutline">Go to Outline</button></div></div>
       <div class="busy" id="busy" hidden>Working…</div>
     </div>
   </div>
@@ -684,14 +696,11 @@ const CaseGen = (() => {
     // keyring
     let ring = null;
     if (p.keyring) {
-      const cbb = G.bbox(fig);
-      const x = cbb.x0 + p.keyringPos * cbb.w;
-      const i = Math.min(g.W - 1, Math.max(0, Math.floor((x - g.ox) * g.res)));
-      let topY = null;
-      for (let j = 0; j < g.H; j++) if (cavS[j * g.W + i] > 0) { topY = g.oy + (j + 0.5) / g.res; break; }
-      if (topY === null) { warnings.push('Keyring position is outside the outline. Move the slider.'); }
+      const cl = G.largestLoopMM(cavS, g);
+      const at = cl && cl.length > 3 ? edgePoint(cl, p.keyringPos, cavS, g) : null;
+      if (!at) { warnings.push('Couldn’t place the keyring hole there. Click the case again to move it.'); }
       else {
-        const cy = topY - (ringR + 2.2);
+        const off = ringR + 2.2, x = at.x + at.nx * off, cy = at.y + at.ny * off;
         ring = { x, y: cy, d: p.keyringD };
         const tab = G.circleField(g, x, cy, ringR + 2.8);
         outerS = G.closing(G.fmax(outerS, tab), g.W, g.H, sc, 2);
@@ -712,7 +721,7 @@ const CaseGen = (() => {
       fields.grooveS = G.fmin(g2, G.neg(g1));
       if (p.grooveOffset + p.grooveWidth > p.border - 1.5) warnings.push('The groove sits too close to the outer edge. Reduce its distance or widen the border.');
       if (p.grooveDepth * 2 >= p.spacerT) warnings.push('Grooves on both faces would nearly cut through the spacer. Make them shallower.');
-    } else {
+    } else if (p.join === 'screws') {
       analysis = placeScrews(g, cavS, outerS, ring, p);
       for (const s of analysis.screws) holes.push({ x: s.x, y: s.y, d: SCREWS[p.screw].hole, kind: 'screw', n: s.n });
       warnings.push(...analysis.warnings);
@@ -721,6 +730,18 @@ const CaseGen = (() => {
     else if (p.spacerT - p.figT > 1.5) warnings.push('The object can rattle: the spacer is much thicker than the object.');
     return { g, fields, lines, holes, grooves, analysis, warnings, params: { ...p } };
   }
+
+  /* Longest span allowed between two screws.
+     Each stretch of plate between neighbouring screws is treated as a beam clamped at both ends
+     (width = border, thickness = plate). A firm 2 N press at mid-span may open the edge by at most
+     0.15 mm: delta = F L^3 / (192 E I)  ->  L = cbrt(192 E I delta / F). Cast acrylic E = 3200 MPa. */
+  const SPAN = { E: 3200, F: 2, delta: 0.15 };
+  function spanLimit(p) {
+    const w = Math.max(2, p.border), t = Math.max(0.5, p.plateT), I = w * t ** 3 / 12;
+    return Math.min(150, Math.max(15, Math.cbrt(192 * SPAN.E * I * SPAN.delta / SPAN.F)));
+  }
+  function inside(poly, x, y) { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
+  function centroid(loop) { let a = 0, cx = 0, cy = 0; for (let i = 0; i < loop.length; i++) { const [x0, y0] = loop[i], [x1, y1] = loop[(i + 1) % loop.length]; const f = x0 * y1 - x1 * y0; a += f; cx += (x0 + x1) * f; cy += (y0 + y1) * f; } return a ? [cx / (3 * a), cy / (3 * a)] : [0, 0]; }
 
   function placeScrews(g, cavS, outerS, ring, p) {
     const G = Geo;
@@ -742,8 +763,11 @@ const CaseGen = (() => {
     let longest = 0, run = 0; for (let k = 0; k < 2 * n; k++) { if (!valid[k % n]) { run++; longest = Math.max(longest, run); } else run = 0; }
     longest = Math.min(longest, n) * 0.5;
     let best = null;
-    const minN = Math.max(p.minScrews, Math.ceil(L / p.spacing));
-    for (let N = minN; N <= minN + 8 && N <= 60; N++) {
+    // Fewest screws: start from the count the span limit demands and add screws until every gap fits,
+    // every screw has room, and the screws surround the middle of the case so the plates can't rock.
+    const S = spanLimit(p); const mid = centroid(path);
+    const minN = Math.max(3, p.minScrews || 3, Math.ceil(L / S));
+    for (let N = minN; N <= minN + 12 && N <= 60; N++) {
       let bestPhase = null;
       for (let ph = 0; ph < 32; ph++) {
         const idx = [];
@@ -766,18 +790,66 @@ const CaseGen = (() => {
       const idx = bestPhase.idx.slice().sort((a, b) => a - b);
       const gaps = idx.map((v, k) => (((idx[(k + 1) % idx.length] - v) + n) % n || n) * 0.5);
       const maxGap = gaps.length ? Math.max(...gaps) : L;
-      best = { N, idx, gaps, maxGap, ok: bestPhase.ok };
-      if (bestPhase.ok && maxGap <= p.spacing * 1.15) break;
+      const ring2 = idx.map(q => path[q]); const surrounds = idx.length >= 3 && inside(ring2, mid[0], mid[1]);
+      best = { N, idx, gaps, maxGap, ok: bestPhase.ok, surrounds };
+      if (bestPhase.ok && maxGap <= S * 1.05 && surrounds) break;
     }
     const screws = best.idx.map((q, k) => ({ x: path[q][0], y: path[q][1], n: k + 1, clearance: clearance[q] }));
     const minClear = screws.length ? Math.min(...screws.map(s => s.clearance)) : 0;
     if (validFrac < 0.6) warnings.push(`The border is too narrow for ${p.screw} holes along much of the outline. A border of about ${(2 * (hr + m) + 1).toFixed(1)} mm leaves room everywhere.`);
-    if (best.maxGap > p.spacing * 1.15) warnings.push(`One gap between screws is ${best.maxGap.toFixed(0)} mm, longer than your ${p.spacing} mm limit, because the border is too narrow there. Widen the border or accept the gap.`);
+    if (best.maxGap > S * 1.05) warnings.push(`One gap between screws is ${best.maxGap.toFixed(0)} mm, longer than the ${S.toFixed(0)} mm the plates can span, because the border is too narrow there. Widen the border or use thicker acrylic.`);
     if (!best.ok) warnings.push('Some screws could not be placed. Widen the border or use a smaller screw.');
     const stack = 2 * p.plateT + p.spacerT;
     const need = stack + spec.washer + spec.nut + 0.5;
-    const length = LENGTHS.find(l => l >= need) || Math.ceil(need);
-    return { screws, path, gaps: best.gaps, maxGap: best.maxGap, minClear, pathLength: L, spec, length, stack, validFrac, longestInvalid: longest, warnings };
+    let length = LENGTHS.find(l => l >= need) || Math.ceil(need);
+    // Counterbores: a round pocket in the front plate for the head, a hex pocket in the back plate for the nut.
+    let cb = null;
+    if (p.counterbore) {
+      cb = { headD: spec.head + 0.4, headDepth: spec.headH + 0.1, nutR: spec.nutW / Math.sqrt(3) + 0.15, nutDepth: spec.nut + 0.1 };
+      const deepest = Math.max(cb.headDepth, cb.nutDepth), left = p.plateT - deepest;
+      if (left < 0.8) warnings.push(`Flush ${p.screw} heads and nuts need pockets ${deepest.toFixed(1)} mm deep, which leaves only ${Math.max(0, left).toFixed(1)} mm of the ${p.plateT} mm plates. Use plates at least ${(deepest + 0.8).toFixed(1)} mm thick, or a smaller screw.`);
+      // From the head seat, the screw should end inside the nut (at least 80% engaged) without poking out of the back.
+      const reach = stack - cb.headDepth, shortest = reach - 0.1 - 0.2 * spec.nut;
+      const fit = LENGTHS.filter(l => l >= shortest && l <= reach + 1e-9);
+      if (fit.length) { length = fit[fit.length - 1]; cb.trim = null; }
+      else { length = LENGTHS.find(l => l >= reach) || Math.ceil(reach); cb.trim = Math.floor(reach * 2) / 2; warnings.push(`No stock ${p.screw} screw ends flush with this stack. Buy ${length} mm screws and cut them to ${cb.trim} mm.`); }
+      const pocketR = Math.max(cb.headD / 2, cb.nutR);
+      const tight = screws.filter(s => s.clearance + hr - pocketR < 0.6).length;
+      if (tight) warnings.push(`${tight} of the counterbores come within 0.6 mm of an edge. Widen the border or use a smaller screw.`);
+      cb.reach = reach;
+    }
+    return { screws, path, gaps: best.gaps, maxGap: best.maxGap, span: S, cb, minClear, pathLength: L, spec, length, stack, validFrac, longestInvalid: longest, warnings };
+  }
+
+  // The window edge as a path that starts at its topmost point and runs one fixed way round,
+  // so a fraction 0..1 names a spot on the edge.
+  function edgePath(loop) {
+    let pts = loop.slice(); if (Geo.area(pts) < 0) pts.reverse();
+    let top = 0; for (let i = 1; i < pts.length; i++) if (pts[i][1] < pts[top][1] - 1e-9 || (Math.abs(pts[i][1] - pts[top][1]) < 1e-9 && Math.abs(pts[i][0]) < Math.abs(pts[top][0]))) top = i;
+    pts = pts.slice(top).concat(pts.slice(0, top));
+    const cum = [0]; for (let i = 1; i <= pts.length; i++) { const a = pts[i - 1], b = pts[i % pts.length]; cum.push(cum[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+    return { pts, cum, L: cum[pts.length] };
+  }
+  function edgePoint(loop, t, cavS, g) {
+    const { pts, cum, L } = edgePath(loop); const n = pts.length; if (!(L > 0)) return null;
+    const s = ((t % 1) + 1) % 1 * L; let i = 0; while (i < n - 1 && cum[i + 1] < s) i++;
+    const a = pts[i], b = pts[(i + 1) % n], f = (s - cum[i]) / ((cum[i + 1] - cum[i]) || 1);
+    const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f;
+    const k = Math.max(2, Math.round(n / 120)); const P = pts[(i - k + n) % n], Q = pts[(i + 1 + k) % n];
+    let nx = Q[1] - P[1], ny = -(Q[0] - P[0]); const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+    // the field is positive inside the window, so outward is the way it falls
+    if (Geo.sample(cavS, g, x + nx * 0.5, y + ny * 0.5) > Geo.sample(cavS, g, x - nx * 0.5, y - ny * 0.5)) { nx = -nx; ny = -ny; }
+    return { x, y, nx, ny };
+  }
+  // The fraction along the window edge nearest to a point (inverse of edgePoint).
+  function edgeParam(loop, x, y) {
+    const { pts, cum, L } = edgePath(loop); let best = 0, bd = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length], dx = b[0] - a[0], dy = b[1] - a[1];
+      const f = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+      const d = Math.hypot(a[0] + dx * f - x, a[1] + dy * f - y); if (d < bd) { bd = d; best = (cum[i] + f * (cum[i + 1] - cum[i])) / L; }
+    }
+    return best;
   }
 
   function meshes(cs, p) {
@@ -790,32 +862,47 @@ const CaseGen = (() => {
     const spacerF = (x, y) => Math.min(outer(x, y), -cav(x, y), holeField(x, y));
     const pt = p.plateT, st = p.spacerT;
     const out = {};
-    out.back = G.extrude(plateF, bbo, 0, pt);
+    const cb = cs.analysis && cs.analysis.cb; const scr = cs.analysis ? cs.analysis.screws : [];
+    // pocket fields: positive where the plate stays solid
+    const headF = (x, y) => { let v = 1e3; for (const s of scr) v = Math.min(v, Math.hypot(x - s.x, y - s.y) - cb.headD / 2); return v; };
+    const HEXN = [30, 90, 150].map(a => [Math.cos(a * Math.PI / 180), Math.sin(a * Math.PI / 180)]);
+    const nutF = (x, y) => { let v = 1e3; for (const s of scr) { const dx = x - s.x, dy = y - s.y; v = Math.min(v, Math.max(...HEXN.map(([a, b]) => Math.abs(dx * a + dy * b))) - cb.nutR * Math.cos(Math.PI / 6)); } return v; };
+    out.back = cb ? G.mergeMeshes([G.extrude((x, y) => Math.min(plateF(x, y), nutF(x, y)), bbo, 0, cb.nutDepth), G.extrude(plateF, bbo, cb.nutDepth, pt)]) : G.extrude(plateF, bbo, 0, pt);
     if (grooves) {
       const gr = (x, y) => G.sample(fields.grooveS, g, x, y);
       const sg = (x, y) => Math.min(spacerF(x, y), -gr(x, y));
       const d = Math.min(grooves.depth, st / 2 - 0.05);
       out.spacer = G.mergeMeshes([G.extrude(sg, bbo, pt, pt + d), G.extrude(spacerF, bbo, pt + d, pt + st - d), G.extrude(sg, bbo, pt + st - d, pt + st)]);
     } else out.spacer = G.extrude(spacerF, bbo, pt, pt + st);
-    out.front = G.extrude(plateF, bbo, pt + st, 2 * pt + st);
+    out.front = cb ? G.mergeMeshes([G.extrude(plateF, bbo, pt + st, 2 * pt + st - cb.headDepth), G.extrude((x, y) => Math.min(plateF(x, y), headF(x, y)), bbo, 2 * pt + st - cb.headDepth, 2 * pt + st)]) : G.extrude(plateF, bbo, pt + st, 2 * pt + st);
     const fb = G.bbox(cs.lines.figure);
     out.figure = G.extrude((x, y) => G.sample(fields.figS, g, x, y), fb, pt, pt + p.figT);
     if (cs.analysis) {
       const sp = cs.analysis.spec; const top = 2 * pt + st;
-      const parts = [];
+      const parts = [], top_ = [], bottom = [];
       for (const s of cs.analysis.screws) {
         const r = (sp.hole - 0.2) / 2;
-        parts.push(G.cylinder(s.x, s.y, r, -sp.washer - sp.nut - 0.5, top + sp.washer + 0.01));
-        parts.push(G.cylinder(s.x, s.y, sp.head / 2, top + sp.washer, top + sp.washer + sp.headH));
-        parts.push(G.cylinder(s.x, s.y, sp.nutW / 2, -sp.washer - sp.nut, -sp.washer, 6));
-        parts.push(G.cylinder(s.x, s.y, sp.head / 2 + 0.3, top, top + sp.washer));
-        parts.push(G.cylinder(s.x, s.y, sp.head / 2 + 0.3, -sp.washer, 0));
+        if (cb) { // head and nut sunk into their pockets
+          const seat = top - cb.headDepth, L = cb.trim || cs.analysis.length;
+          top_.push(G.cylinder(s.x, s.y, r, Math.max(0.02, seat - L), seat + 0.01));
+          top_.push(G.cylinder(s.x, s.y, sp.head / 2, seat, seat + sp.headH));
+          bottom.push(G.cylinder(s.x, s.y, sp.nutW / Math.sqrt(3), cb.nutDepth - sp.nut, cb.nutDepth, 6));
+          continue;
+        }
+        top_.push(G.cylinder(s.x, s.y, r, -sp.washer - sp.nut - 0.5, top + sp.washer + 0.01));
+        top_.push(G.cylinder(s.x, s.y, sp.head / 2, top + sp.washer, top + sp.washer + sp.headH));
+        top_.push(G.cylinder(s.x, s.y, sp.head / 2 + 0.3, top, top + sp.washer));
+        bottom.push(G.cylinder(s.x, s.y, sp.nutW / 2, -sp.washer - sp.nut, -sp.washer, 6));
+        bottom.push(G.cylinder(s.x, s.y, sp.head / 2 + 0.3, -sp.washer, 0));
       }
+      parts.push(...top_, ...bottom);
       out.screws = parts.length ? G.mergeMeshes(parts) : null;
+      out.screwHeads = top_.length ? G.mergeMeshes(top_) : null; // screw + top washer: rides up with the front plate
+      out.screwNuts = bottom.length ? G.mergeMeshes(bottom) : null; // nut + bottom washer: drops with the back plate
     }
     return out;
   }
-  return { build, meshes, SCREWS };
+  return { build, meshes, edgeParam, spanLimit, SPAN, SCREWS };
 })();
 if (typeof module !== 'undefined') module.exports = CaseGen;
 </script>
@@ -861,6 +948,15 @@ async function saveFile(filename, data) {
 const enc = s => new TextEncoder().encode(s);
 const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+// Wheel input: a trackpad pinch arrives as ctrl + wheel in small steps, a two-finger drag as plain
+// wheel events with fine (often fractional, often sideways) deltas, and a mouse wheel in whole notches.
+// Returns { zoom: factor > 1 to zoom in } or { pan: [dx, dy] in screen px, as if dragging the content }.
+function wheelGesture(e) {
+  const u = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1; const dx = e.deltaX * u, dy = e.deltaY * u;
+  if (e.ctrlKey) return { zoom: Math.exp(-dy * 0.012) };
+  const notch = e.deltaMode !== 0 || (dx === 0 && Number.isInteger(dy) && Math.abs(dy) >= 50 && (e.wheelDeltaY === undefined || e.wheelDeltaY === 0 || e.wheelDeltaY % 120 === 0));
+  return notch ? { zoom: Math.exp(-dy * 0.0015) } : { pan: [-dx, -dy] };
+}
 function makeZip(files) { // [{name, data: Uint8Array|string}]
   const parts = [], central = []; let offset = 0;
   for (const f of files) {
@@ -962,7 +1058,7 @@ function setPhase(p) {
   $('#cv1').hidden = p !== 1; $('#tools').hidden = p === 1 && !P1.img;
   $('#empty1').hidden = !(p === 1 && !P1.img);
   $('#viewtabs').hidden = p !== 2;
-  if (p === 2) P2.enter(); else { $('#cv2').hidden = true; $('#cv3').hidden = true; $('#empty2').hidden = true; $('#legend').hidden = true; P1.resize(); }
+  if (p === 2) P2.enter(); else { $('#cubeBox').hidden = true; $('#cv2').hidden = true; $('#cv3').hidden = true; $('#empty2').hidden = true; $('#legend').hidden = true; P1.resize(); }
   updateHud();
 }
 $('#tab1').addEventListener('click', () => setPhase(1));
@@ -1023,7 +1119,7 @@ P1.load = function (file) {
   im.onerror = () => toast('That file couldn’t be opened as an image.');
   im.src = url;
 };
-P1.setWork = function (c) { P1.work = c; P1.W = c.width; P1.H = c.height; P1.erase = new Uint8Array(P1.W * P1.H); P1.eraseCv = null; };
+P1.setWork = function (c) { P1.work = c; P1.W = c.width; P1.H = c.height; P1.erase = new Uint8Array(P1.W * P1.H); P1.eraseCv = null; P1.eraseUndo = []; P1.eraseRedo = []; if (P1.updateEraseBtns) P1.updateEraseBtns(); };
 P1.resetTrace = function () { P1.contour = P1.keys = P1.line = null; for (const e of P1.enl) e.loop = null; P1.maskCv = null; P1.seed = null; P1.sel = -1; P1.traceDone = false; $('#traceInfo').hidden = true; $('#s3sub').textContent = ''; if (P1.updateEnlInfo) { P1.updateEnlInfo(); P1.renderExport(); } };
 function markDone(panel, n, v) { const s = $(`${panel} .step[data-step="${n}"]`); if (s) s.classList.toggle('done', v); }
 P1.onStep = function (n) { P1.step = +n; P1.draw(); };
@@ -1095,7 +1191,7 @@ P1.rectify = function (pts, wmm, hmm) {
 const toolSeg = seg('#toolSeg', v => {
   P1.tool = v; $('#brushRow').hidden = v !== 'erase';
   $('#toolHint').textContent = v === 'edit' ? 'Drag a point to move it. Double-click the line to add a point. Select a point and press Delete to remove it.'
-    : v === 'pick' ? 'Click the object you want if the trace picked the wrong one.' : 'Paint over anything that shouldn’t be part of the object, like a keyring or a shadow.';
+    : v === 'pick' ? 'Click the object you want if the trace picked the wrong one.' : P1.eraseHint();
   P1.draw();
 });
 $('#brush').addEventListener('input', () => $('#brushV').textContent = $('#brush').value + ' mm');
@@ -1105,7 +1201,29 @@ const retrace = debounce(() => { if (P1.traceDone) P1.runTrace(); }, 350);
 ['#thrAuto', '#dark', '#even'].forEach(id => $(id).addEventListener('change', () => retrace()));
 $('#detail').addEventListener('change', () => { if (P1.contour) { P1.makeKeys(); P1.updateLine(); } });
 $('#smooth').addEventListener('change', () => { if (P1.keys) P1.updateLine(); });
-$('#clearErase').addEventListener('click', () => { P1.erase.fill(0); P1.eraseCv = null; P1.draw(); retrace(); });
+// Erasing: paint to erase, paint with Restore to bring areas back, undo and redo strokes.
+P1.eraseMode = 'add'; P1.eraseUndo = []; P1.eraseRedo = [];
+P1.eraseHint = () => P1.eraseMode === 'add' ? 'Paint over anything that shouldn’t be part of the object, like a keyring or a shadow.' : 'Paint over erased (red) areas to bring them back.';
+const eraseSeg = seg('#eraseSeg', v => { P1.eraseMode = v; $('#toolHint').textContent = P1.eraseHint(); });
+P1.updateEraseBtns = () => { $('#undoErase').disabled = !P1.eraseUndo.length; $('#redoErase').disabled = !P1.eraseRedo.length; };
+P1.eraseSnapshot = () => { P1.eraseUndo.push(P1.erase.slice()); if (P1.eraseUndo.length > 30) P1.eraseUndo.shift(); P1.eraseRedo = []; P1.updateEraseBtns(); };
+P1.rebuildEraseCv = function () { // redraw the red overlay from the mask
+  const W = P1.W, H = P1.H; let any = false; for (let i = 0; i < P1.erase.length; i++) if (P1.erase[i]) { any = true; break; }
+  if (!any) { P1.eraseCv = null; return; }
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'); const im = x.createImageData(W, H);
+  for (let i = 0; i < P1.erase.length; i++) if (P1.erase[i]) { const o = i * 4; im.data[o] = 0xE0; im.data[o + 1] = 0x37; im.data[o + 2] = 0x2A; im.data[o + 3] = 255; }
+  x.putImageData(im, 0, 0); P1.eraseCv = c;
+};
+P1.swapErase = function (from, to) { if (!from.length) return; to.push(P1.erase.slice()); P1.erase = from.pop(); P1.rebuildEraseCv(); P1.updateEraseBtns(); P1.draw(); retrace(); };
+$('#undoErase').addEventListener('click', () => P1.swapErase(P1.eraseUndo, P1.eraseRedo));
+$('#redoErase').addEventListener('click', () => P1.swapErase(P1.eraseRedo, P1.eraseUndo));
+document.addEventListener('keydown', e => {
+  if (phase !== 1 || P1.step !== 3 || P1.tool !== 'erase' || !(e.ctrlKey || e.metaKey) || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); P1.swapErase(P1.eraseUndo, P1.eraseRedo); }
+  else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); P1.swapErase(P1.eraseRedo, P1.eraseUndo); }
+});
+$('#clearErase').addEventListener('click', () => { if (!P1.eraseCv) return; P1.eraseSnapshot(); P1.erase.fill(0); P1.eraseCv = null; P1.draw(); retrace(); });
 $('#delPt').addEventListener('click', () => P1.deleteSel());
 document.addEventListener('keydown', e => {
   if (phase !== 1 || P1.step !== 3 || P1.sel < 0) return;
@@ -1289,7 +1407,7 @@ P1.export = function (kind) {
 };
 $('#toCase').addEventListener('click', () => {
   if (!P1.line || !P1.mmPerPx) { toast('Trace an outline and set the scale first.'); return; }
-  P2.source.set(P1.enl.some(e => e.loop) ? 'enlarged' : 'traced'); P2.sourceKind = P2.source.value; P2.dirty = true; setPhase(2);
+  P2.dirty = true; setPhase(2);
 });
 P1.renderExport();
 
@@ -1345,6 +1463,30 @@ P1.draw = function () {
     if (P1.hover) P1.drawLoupe(c, dpr);
   }
 };
+// Brush outline: shows the eraser or restore brush at its real size under the cursor.
+{
+  const baseDraw = P1.draw;
+  P1.draw = function () {
+    baseDraw();
+    const erasing = phase === 1 && P1.step === 3 && P1.tool === 'erase' && P1.work;
+    cv1.style.cursor = erasing ? 'none' : '';
+    if (!erasing || !P1.brushAt) return;
+    const dpr = window.devicePixelRatio || 1, c = ctx1; const [x, y] = P1.brushAt;
+    const r = Math.max(1, num('#brush') / P1.unit() * P1.view.s) * dpr; const add = P1.eraseMode !== 'remove';
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+    c.beginPath(); c.arc(x * dpr, y * dpr, r, 0, Math.PI * 2);
+    c.fillStyle = add ? 'rgba(224,55,42,0.18)' : 'rgba(60,190,120,0.18)'; c.fill();
+    c.lineWidth = 3 * dpr; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.stroke();
+    c.lineWidth = 1.5 * dpr; c.strokeStyle = add ? '#FF6B5E' : '#5EE09A'; c.stroke();
+    c.beginPath(); c.moveTo(x * dpr - 4 * dpr, y * dpr); c.lineTo(x * dpr + 4 * dpr, y * dpr); c.moveTo(x * dpr, y * dpr - 4 * dpr); c.lineTo(x * dpr, y * dpr + 4 * dpr);
+    c.lineWidth = 1.5 * dpr; c.strokeStyle = '#fff'; c.stroke();
+    c.font = `600 ${11 * dpr}px Archivo, sans-serif`; c.fillStyle = '#fff'; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 3 * dpr;
+    const label = `${add ? 'Erase' : 'Restore'} ${num('#brush')} mm`; const tx = x * dpr + r * 0.72 + 6 * dpr, ty = y * dpr - r * 0.72 - 4 * dpr;
+    c.strokeText(label, tx, ty); c.fillText(label, tx, ty);
+    c.restore();
+  };
+}
+$('#brush').addEventListener('input', () => { if (P1.brushAt) P1.draw(); });
 P1.drawLoupe = function (c, dpr) {
   const [wx, wy] = P1.hover; const R = 64, z = 5; const cx = cv1.width - (R + 16) * dpr, cy = (R + 56) * dpr;
   c.save(); c.beginPath(); c.arc(cx, cy, R * dpr, 0, Math.PI * 2); c.clip();
@@ -1369,11 +1511,12 @@ cv1.addEventListener('pointerdown', e => {
   const near = (pts, conv) => { let bi = -1, bd = 12; pts.forEach((p, i) => { const [sx, sy] = toScreen(...conv(p)); const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; bi = i; } }); return bi; };
   if (P1.step === 2) { const i = near(P1.cal.pts, p => p); if (i >= 0) drag = { type: 'cal', i }; }
   else if (P1.step === 3 && P1.tool === 'edit' && P1.keys) { const i = near(P1.keys, p => [mm2px(p[0]), mm2px(p[1])]); if (i >= 0) { drag = { type: 'key', i }; P1.sel = i; $('#delPt').disabled = false; P1.draw(); } }
-  else if (P1.step === 3 && P1.tool === 'erase') { drag = { type: 'erase' }; P1.paint(wx, wy); }
+  else if (P1.step === 3 && P1.tool === 'erase') { P1.eraseSnapshot(); drag = { type: 'erase', last: [wx, wy] }; P1.paint(wx, wy); }
 });
 cv1.addEventListener('pointermove', e => {
   const [x, y] = localXY(e, cv1); const [wx, wy] = toWork(x, y);
   if (P1.step === 2 && P1.work) { P1.hover = [wx, wy]; if (!drag) P1.draw(); }
+  if (P1.step === 3 && P1.tool === 'erase' && P1.work) { P1.brushAt = [x, y]; if (!drag) P1.draw(); } else if (P1.brushAt) { P1.brushAt = null; }
   if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, [x, y]);
   if (!drag) return;
   if (drag.type === 'pinch' && ptrs.size === 2) {
@@ -1383,7 +1526,10 @@ cv1.addEventListener('pointermove', e => {
   }
   if (drag.type === 'cal') { P1.cal.pts[drag.i] = [wx, wy]; P1.draw(); return; }
   if (drag.type === 'key') { const u = P1.unit(); P1.keys[drag.i] = [wx * u, wy * u]; P1.line = $('#smooth').checked ? Geo.catmull(P1.keys, 0.3 * (P1.mmPerPx ? 1 : 10)) : P1.keys.slice(); P1.draw(); return; }
-  if (drag.type === 'erase') { P1.paint(wx, wy); return; }
+  if (drag.type === 'erase') { // fill in between samples so fast strokes stay continuous
+    const [lx, ly] = drag.last; const r = num('#brush') / P1.unit(); const n = Math.max(1, Math.ceil(Math.hypot(wx - lx, wy - ly) / Math.max(0.5, r * 0.5)));
+    for (let i = 1; i <= n; i++) P1.paint(lx + (wx - lx) * i / n, ly + (wy - ly) * i / n, i < n); drag.last = [wx, wy]; return;
+  }
   if (drag.type === 'maybe' || drag.type === 'pan') {
     if (Math.hypot(x - drag.sx, y - drag.sy) > 4) drag.type = 'pan';
     if (drag.type === 'pan') { P1.view = { ...drag.view, tx: drag.view.tx + x - drag.sx, ty: drag.view.ty + y - drag.sy }; P1.draw(); }
@@ -1405,7 +1551,7 @@ function endPtr(e) {
 cv1.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
 cv1.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 cv1.addEventListener('pointerup', endPtr); cv1.addEventListener('pointercancel', endPtr);
-cv1.addEventListener('pointerleave', () => { if (P1.hover) { P1.hover = null; P1.draw(); } });
+cv1.addEventListener('pointerleave', () => { if (P1.hover || P1.brushAt) { P1.hover = null; P1.brushAt = null; P1.draw(); } });
 cv1.addEventListener('dblclick', e => {
   if (P1.step !== 3 || P1.tool !== 'edit' || !P1.keys) return;
   const [x, y] = localXY(e, cv1); const [wx, wy] = toWork(x, y); const u = P1.unit(); const p = [wx * u, wy * u];
@@ -1414,15 +1560,16 @@ cv1.addEventListener('dblclick', e => {
   K.splice(bi + 1, 0, p); P1.sel = bi + 1; $('#delPt').disabled = false; P1.updateLine();
 });
 cv1.addEventListener('wheel', e => {
-  e.preventDefault(); const [x, y] = localXY(e, cv1); const k = Math.exp(-e.deltaY * 0.0015); const v = P1.view;
-  P1.view = { s: v.s * k, tx: x - (x - v.tx) * k, ty: y - (y - v.ty) * k }; P1.draw();
+  e.preventDefault(); const [x, y] = localXY(e, cv1); const g = wheelGesture(e); const v = P1.view;
+  if (g.pan) { P1.view = { ...v, tx: v.tx + g.pan[0], ty: v.ty + g.pan[1] }; P1.draw(); return; }
+  const k = g.zoom; P1.view = { s: v.s * k, tx: x - (x - v.tx) * k, ty: y - (y - v.ty) * k }; P1.draw();
 }, { passive: false });
-P1.paint = function (wx, wy) {
-  const r = num('#brush') / P1.unit(); const W = P1.W, H = P1.H;
-  if (!P1.eraseCv) { P1.eraseCv = document.createElement('canvas'); P1.eraseCv.width = W; P1.eraseCv.height = H; }
-  const ec = P1.eraseCv.getContext('2d'); ec.fillStyle = '#E0372A'; ec.beginPath(); ec.arc(wx, wy, r, 0, Math.PI * 2); ec.fill();
-  for (let y = Math.max(0, Math.floor(wy - r)); y <= Math.min(H - 1, Math.ceil(wy + r)); y++) for (let x = Math.max(0, Math.floor(wx - r)); x <= Math.min(W - 1, Math.ceil(wx + r)); x++) if ((x + 0.5 - wx) ** 2 + (y + 0.5 - wy) ** 2 <= r * r) P1.erase[y * W + x] = 1;
-  P1.draw();
+P1.paint = function (wx, wy, noDraw) {
+  const r = num('#brush') / P1.unit(); const W = P1.W, H = P1.H; const add = P1.eraseMode !== 'remove';
+  if (!P1.eraseCv) { if (!add) return; P1.eraseCv = document.createElement('canvas'); P1.eraseCv.width = W; P1.eraseCv.height = H; }
+  const ec = P1.eraseCv.getContext('2d'); ec.globalCompositeOperation = add ? 'source-over' : 'destination-out'; ec.fillStyle = '#E0372A'; ec.beginPath(); ec.arc(wx, wy, r, 0, Math.PI * 2); ec.fill(); ec.globalCompositeOperation = 'source-over';
+  for (let y = Math.max(0, Math.floor(wy - r)); y <= Math.min(H - 1, Math.ceil(wy + r)); y++) for (let x = Math.max(0, Math.floor(wx - r)); x <= Math.min(W - 1, Math.ceil(wx + r)); x++) if ((x + 0.5 - wx) ** 2 + (y + 0.5 - wy) ** 2 <= r * r) P1.erase[y * W + x] = add ? 1 : 0;
+  if (!noDraw) P1.draw();
 };
 // file input & drop
 $('#file1').addEventListener('change', e => { const f = e.target.files[0]; if (f) P1.load(f); e.target.value = ''; });
@@ -1437,7 +1584,7 @@ stage.addEventListener('drop', e => {
 class Viewer {
   constructor(cv) {
     this.cv = cv; const gl = cv.getContext('webgl', { antialias: true, alpha: true, premultipliedAlpha: true }); this.gl = gl; this.items = [];
-    this.yaw = -1.05; this.pitch = 0.75; this.dist = 250; this.target = [0, 0, 2]; this.explode = 0.35; this.ok = !!gl;
+    this.yaw = -1.05; this.pitch = 0.75; this.roll = 0; this.dist = 250; this.target = [0, 0, 2]; this.explode = 0.35; this.ok = !!gl;
     if (!gl) return;
     const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
     const pr = gl.createProgram();
@@ -1445,18 +1592,100 @@ class Viewer {
     gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, 'precision mediump float;varying vec3 vn;uniform vec4 col;uniform vec3 L;uniform float lit;void main(){float d=abs(dot(normalize(vn),L));float k=mix(1.0,0.45+0.55*d,lit);gl_FragColor=vec4(col.rgb*k*col.a,col.a);}'));
     gl.linkProgram(pr); this.pr = pr;
     this.loc = { p: gl.getAttribLocation(pr, 'p'), n: gl.getAttribLocation(pr, 'n'), M: gl.getUniformLocation(pr, 'M'), off: gl.getUniformLocation(pr, 'off'), col: gl.getUniformLocation(pr, 'col'), L: gl.getUniformLocation(pr, 'L'), lit: gl.getUniformLocation(pr, 'lit') };
+    // photo program: a textured quad (premultiplied alpha)
+    const pq = gl.createProgram();
+    gl.attachShader(pq, sh(gl.VERTEX_SHADER, 'attribute vec3 p;attribute vec2 uv;uniform mat4 M;uniform vec3 off;varying vec2 vu;void main(){vu=uv;gl_Position=M*vec4(p+off,1.0);}'));
+    gl.attachShader(pq, sh(gl.FRAGMENT_SHADER, 'precision mediump float;varying vec2 vu;uniform sampler2D tex;uniform float a;void main(){vec4 c=texture2D(tex,vu);if(c.a<0.02)discard;gl_FragColor=c*a;}'));
+    gl.linkProgram(pq); this.pq = pq;
+    this.qloc = { p: gl.getAttribLocation(pq, 'p'), uv: gl.getAttribLocation(pq, 'uv'), M: gl.getUniformLocation(pq, 'M'), off: gl.getUniformLocation(pq, 'off'), tex: gl.getUniformLocation(pq, 'tex'), a: gl.getUniformLocation(pq, 'a') };
+    this.photo = null; this.showPhoto = true;
+    /* Navigation (Revit style):
+       middle drag = pan, Shift + middle drag = orbit, wheel = zoom at the cursor, double-click middle = zoom to fit.
+       Also: left drag = orbit, Shift + left or right drag = pan (for trackpads), two-finger pinch = zoom, double-click = fit. */
     const pts = new Map(); let st = null;
-    cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); st = { yaw: this.yaw, pitch: this.pitch, dist: this.dist, p: [e.clientX, e.clientY], d: pts.size === 2 ? this.pinch(pts) : 0 }; });
+    const begin = (e, mode) => { st = { mode, yaw: this.yaw, pitch: this.pitch, dist: this.dist, target: this.target.slice(), p: [e.clientX, e.clientY], d: pts.size === 2 ? this.pinch(pts) : 0 }; };
+    let lastMid = 0;
+    cv.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); }); // stop autoscroll
+    cv.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
+    cv.addEventListener('contextmenu', e => e.preventDefault());
+    cv.addEventListener('pointerdown', e => {
+      try { cv.setPointerCapture(e.pointerId); } catch (_) {} pts.set(e.pointerId, [e.clientX, e.clientY]);
+      let mode;
+      if (e.button === 1) {
+        e.preventDefault();
+        const now = performance.now(); if (now - lastMid < 350) { lastMid = 0; this.resetView(); this.render(); pts.delete(e.pointerId); st = null; return; } lastMid = now;
+        mode = e.shiftKey ? 'orbit' : 'pan';
+      } else if (e.button === 2) mode = 'pan';
+      else mode = e.shiftKey ? 'pan' : 'orbit';
+      begin(e, mode);
+    });
     cv.addEventListener('pointermove', e => {
-      if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]);
-      if (pts.size === 2) { if (!st.d) st.d = this.pinch(pts); this.dist = Math.max(10, st.dist * st.d / this.pinch(pts)); }
-      else { this.yaw = st.yaw - (e.clientX - st.p[0]) * 0.008; this.pitch = Math.max(-1.45, Math.min(1.5, st.pitch + (e.clientY - st.p[1]) * 0.008)); }
+      if (!pts.has(e.pointerId) || !st) return; pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pts.size === 2) { if (!st.d) st.d = this.pinch(pts); this.dist = Math.max(1, st.dist * st.d / this.pinch(pts)); }
+      else {
+        // Shift can be pressed or released mid-drag with the middle button, as in Revit.
+        const mode = e.buttons & 4 ? (e.shiftKey ? 'orbit' : 'pan') : st.mode;
+        if (mode !== st.mode) { begin(e, mode); return; }
+        const dx = e.clientX - st.p[0], dy = e.clientY - st.p[1];
+        if (mode === 'pan') {
+          const { x, y } = this.camAxes(); const r = cv.getBoundingClientRect();
+          const k = 2 * st.dist * Math.tan(0.3) / Math.max(1, r.height);
+          this.target = [0, 1, 2].map(i => st.target[i] - x[i] * dx * k + y[i] * dy * k);
+        } else { this.yaw = st.yaw - dx * 0.008; this.pitch = Math.max(-1.45, Math.min(1.5, st.pitch + dy * 0.008)); }
+      }
       this.render();
     });
-    const up = e => { pts.delete(e.pointerId); if (pts.size) { const [q] = pts.values(); st = { yaw: this.yaw, pitch: this.pitch, dist: this.dist, p: q, d: 0 }; } };
+    const up = e => {
+      if (st && pts.size === 1 && e.button === 0 && this.onClick && Math.hypot(e.clientX - st.p[0], e.clientY - st.p[1]) < 5) { const z = this.clickZ ? this.clickZ() : this.target[2]; const h = this.pickPlane(e.clientX, e.clientY, z); if (h && this.onClick(h[0], -h[1])) { this.yaw = st.yaw; this.pitch = st.pitch; this.target = st.target; this.render(); } }
+      pts.delete(e.pointerId); if (pts.size) { const [q] = pts.values(); begin({ clientX: q[0], clientY: q[1] }, 'orbit'); } else st = null; };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-    cv.addEventListener('wheel', e => { e.preventDefault(); this.dist *= Math.exp(e.deltaY * 0.0012); this.render(); }, { passive: false });
+    cv.addEventListener('wheel', e => {
+      e.preventDefault(); const g = wheelGesture(e);
+      if (g.pan) { // two-finger drag pans, like the middle button
+        const { x, y } = this.camAxes(); const r = cv.getBoundingClientRect(); const s = 2 * this.dist * Math.tan(0.3) / Math.max(1, r.height);
+        this.target = this.target.map((t, i) => t - x[i] * g.pan[0] * s + y[i] * g.pan[1] * s); this.render(); return;
+      }
+      const k = 1 / g.zoom;
+      const hit = this.pickPlane(e.clientX, e.clientY);
+      if (hit) this.target = this.target.map((t, i) => hit[i] + (t - hit[i]) * k);
+      this.dist *= k; this.render();
+    }, { passive: false });
     cv.addEventListener('dblclick', () => { this.resetView(); this.render(); });
+  }
+  eye() { const t = this.target, cp = Math.cos(this.pitch); return [t[0] + this.dist * cp * Math.cos(this.yaw), t[1] + this.dist * cp * Math.sin(this.yaw), t[2] + this.dist * Math.sin(this.pitch)]; }
+  camAxes() { // x = screen right, y = screen up, z = towards the eye
+    const e = this.eye(), t = this.target; let z = [e[0] - t[0], e[1] - t[1], e[2] - t[2]]; let l = Math.hypot(...z); z = z.map(v => v / l);
+    let x = [-z[1], z[0], 0]; l = Math.hypot(...x) || 1; x = x.map(v => v / l);
+    const y0 = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+    // roll turns the picture about the line of sight
+    const c = Math.cos(this.roll), s = Math.sin(this.roll);
+    return { x: [0, 1, 2].map(i => c * x[i] - s * y0[i]), y: [0, 1, 2].map(i => s * x[i] + c * y0[i]), z };
+  }
+  viewMat(e) { const { x, y, z } = this.camAxes(); const d = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -d(x, e), -d(y, e), -d(z, e), 1]; }
+  pickPlane(cx, cy, zp) { // where the cursor ray meets a horizontal plane (default: through the target)
+    const r = this.cv.getBoundingClientRect(); if (!r.width || !r.height) return null;
+    const { x, y, z } = this.camAxes(); const e = this.eye(); const th = Math.tan(0.3);
+    const u = ((cx - r.left) / r.width * 2 - 1) * th * r.width / r.height, v = (1 - (cy - r.top) / r.height * 2) * th;
+    const d = [0, 1, 2].map(i => x[i] * u + y[i] * v - z[i]);
+    if (Math.abs(d[2]) < 1e-4) return null; const s = ((zp === undefined ? this.target[2] : zp) - e[2]) / d[2];
+    if (!(s > 0) || s > this.dist * 50) return null; return d.map((di, i) => e[i] + di * s);
+  }
+  setPhoto(ph) { // ph: { canvas, x0, y0, x1, y1 (mm, y down), z, layer } or null
+    if (!this.ok) return; const gl = this.gl;
+    if (this.photo) { gl.deleteTexture(this.photo.tex); gl.deleteBuffer(this.photo.bp); gl.deleteBuffer(this.photo.bu); }
+    this.photo = null; if (!ph) return;
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ph.canvas);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(w => gl.texParameteri(gl.TEXTURE_2D, w, gl.CLAMP_TO_EDGE));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    const { x0, y0, x1, y1, z } = ph;
+    const P = new Float32Array([x0, -y0, z, x1, -y0, z, x1, -y1, z, x0, -y0, z, x1, -y1, z, x0, -y1, z]);
+    const U = new Float32Array([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]);
+    const bp = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bp); gl.bufferData(gl.ARRAY_BUFFER, P, gl.STATIC_DRAW);
+    const bu = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bu); gl.bufferData(gl.ARRAY_BUFFER, U, gl.STATIC_DRAW);
+    this.photo = { tex, bp, bu, layer: ph.layer, zc: z };
   }
   pinch(pts) { const [a, b] = [...pts.values()]; return Math.hypot(a[0] - b[0], a[1] - b[1]) || 1; }
   setItems(list, bb) {
@@ -1468,9 +1697,9 @@ class Viewer {
       let bl = null; if (i.mesh.lines.length) { bl = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bl); gl.bufferData(gl.ARRAY_BUFFER, i.mesh.lines, gl.STATIC_DRAW); }
       return { ...i, bp, bn, bl, count: i.mesh.pos.length / 3, lcount: i.mesh.lines.length / 3 };
     });
-    const first = !this.bb; this.bb = bb; if (first) this.needFit = true; else this.target = [bb.cx, -bb.cy, 2];
+    const first = !this.bb; this.bb = bb; if (first) this.needFit = true;
   }
-  resetView() { if (!this.bb) return; const r = this.cv.getBoundingClientRect(); const asp = r.width > 0 && r.height > 0 ? r.width / r.height : 1; this.dist = Math.max(this.bb.w, this.bb.h) * 2.1 / Math.min(1, asp * 0.75); this.target = [this.bb.cx, -this.bb.cy, 2]; this.yaw = -1.05; this.pitch = 0.75; }
+  resetView() { if (!this.bb) return; const r = this.cv.getBoundingClientRect(); const asp = r.width > 0 && r.height > 0 ? r.width / r.height : 1; this.dist = Math.max(this.bb.w, this.bb.h) * 2.1 / Math.min(1, asp * 0.75); this.target = [this.bb.cx, -this.bb.cy, 2]; this.yaw = -1.05; this.pitch = 0.75; this.roll = 0; }
   render() {
     if (!this.ok || this.cv.hidden) return; const gl = this.gl; const dpr = window.devicePixelRatio || 1;
     const r = this.cv.getBoundingClientRect(); const W = Math.max(1, Math.round(r.width * dpr)), H = Math.max(1, Math.round(r.height * dpr));
@@ -1479,14 +1708,27 @@ class Viewer {
     gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (!this.items.length) return;
     gl.useProgram(this.pr); gl.enable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.disable(gl.CULL_FACE);
-    const t = this.target; const cp = Math.cos(this.pitch);
-    const eye = [t[0] + this.dist * cp * Math.cos(this.yaw), t[1] + this.dist * cp * Math.sin(this.yaw), t[2] + this.dist * Math.sin(this.pitch)];
-    const M = mul(perspective(0.6, W / H, this.dist * 0.02, this.dist * 20), lookAt(eye, t, [0, 0, 1]));
+    const t = this.target; const eye = this.eye();
+    const M = mul(perspective(0.6, W / H, this.dist * 0.02, this.dist * 20), this.viewMat(eye));
     gl.uniformMatrix4fv(this.loc.M, false, M);
     const Ld = [0.35, -0.45, 0.82]; const ll = Math.hypot(...Ld); gl.uniform3f(this.loc.L, Ld[0] / ll, Ld[1] / ll, Ld[2] / ll);
-    const ex = this.explode * Math.max(8, (this.bb ? Math.max(this.bb.w, this.bb.h) : 100) * 0.12);
+    const ex = this.explode * Math.max(8, (this.bb ? Math.max(this.bb.w, this.bb.h) : 100) * 0.12); this.ex = ex;
     const zOf = it => it.zc + ex * it.layer; const dEye = it => Math.hypot(t[0] - eye[0], t[1] - eye[1], zOf(it) - eye[2]);
-    const order = this.items.filter(i => i.alpha >= 1).concat(this.items.filter(i => i.alpha < 1).sort((a, b) => dEye(b) - dEye(a)));
+    const opaque = this.items.filter(i => i.alpha >= 1), clear = this.items.filter(i => i.alpha < 1).sort((a, b) => dEye(b) - dEye(a));
+    this.drawItems(opaque, ex); this.drawItems(clear, ex); this.drawPhoto(M, ex);
+    gl.depthMask(true);
+  }
+  drawPhoto(M, ex) {
+    const ph = this.photo; if (!ph || !this.showPhoto) return; const gl = this.gl, L = this.qloc;
+    gl.useProgram(this.pq); gl.uniformMatrix4fv(L.M, false, M); gl.uniform3f(L.off, 0, 0, ex * ph.layer); gl.uniform1f(L.a, 1);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ph.tex); gl.uniform1i(L.tex, 0);
+    gl.enableVertexAttribArray(L.p); gl.bindBuffer(gl.ARRAY_BUFFER, ph.bp); gl.vertexAttribPointer(L.p, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(L.uv); gl.bindBuffer(gl.ARRAY_BUFFER, ph.bu); gl.vertexAttribPointer(L.uv, 2, gl.FLOAT, false, 0, 0);
+    gl.depthMask(true); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(L.uv); gl.useProgram(this.pr);
+  }
+  drawItems(order, ex) {
+    const gl = this.gl;
     gl.enableVertexAttribArray(this.loc.p);
     for (const it of order) {
       gl.uniform3f(this.loc.off, 0, 0, ex * it.layer);
@@ -1501,7 +1743,6 @@ class Viewer {
         gl.drawArrays(gl.LINES, 0, it.lcount);
       }
     }
-    gl.depthMask(true);
   }
 }
 function perspective(fovy, a, n, f) { const t = 1 / Math.tan(fovy / 2); return [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]; }
@@ -1610,76 +1851,175 @@ function parseDXFLoops(text) {
 
 /* ================= PHASE 2 ================= */
 const P2 = { kind: 'traced', importLoop: null, cs: null, meshes: null, view: '3d', dirty: true, lv: { s: 1, tx: 0, ty: 0 } };
-P2.source = seg('#srcSeg', v => { P2.sourceKind = v; P2.dirty = true; P2.fillEnlPick(); P2.recompute(); });
-P2.enlSel = () => { const id = +$('#enlPick').value; return P1.enl.find(e => e.id === id && e.loop) || P1.enl.find(e => e.loop) || null; };
-P2.fillEnlPick = function () {
-  const sel = $('#enlPick'); const cur = +sel.value; const ok = P1.enl.filter(e => e.loop);
-  sel.innerHTML = ''; for (const e of ok) { const o = document.createElement('option'); o.value = e.id; const b = Geo.bbox(e.loop); o.textContent = `${e.name}, ${fmt(b.w)} × ${fmt(b.h)} mm`; sel.appendChild(o); }
-  if (ok.some(e => e.id === cur)) sel.value = cur;
-  $('#enlPickRow').hidden = P2.sourceKind !== 'enlarged' || ok.length === 0;
-};
-$('#enlPick').addEventListener('change', () => { P2.dirty = true; P2.recompute(); });
-P2.sourceKind = 'traced';
 const cv2 = $('#cv2'), ctx2 = cv2.getContext('2d'); const viewer = new Viewer($('#cv3'));
+// View cube: shows the camera's orientation.
+//  - click a face, edge or corner to look from there
+//  - drag the cube to orbit
+//  - when looking straight at a face: the triangles step to the next face, the curved arrows turn the view 90 degrees
+const Cube = (() => {
+  const cv = $('#cube'); const S = 120; let hover = null, anim = null, token = 0, drag = null;
+  // viewer space: x right, y = back of the object, z = up
+  const F = [
+    { n: [0, 0, 1], u: [1, 0, 0], v: [0, 1, 0], t: 'TOP' }, { n: [0, 0, -1], u: [1, 0, 0], v: [0, -1, 0], t: 'BOTTOM' },
+    { n: [0, -1, 0], u: [1, 0, 0], v: [0, 0, 1], t: 'FRONT' }, { n: [0, 1, 0], u: [-1, 0, 0], v: [0, 0, 1], t: 'BACK' },
+    { n: [1, 0, 0], u: [0, 1, 0], v: [0, 0, 1], t: 'RIGHT' }, { n: [-1, 0, 0], u: [0, -1, 0], v: [0, 0, 1], t: 'LEFT' },
+  ];
+  const ARROWS = [
+    { id: 'up', x: 60, y: 9, rot: 0 }, { id: 'down', x: 60, y: 111, rot: Math.PI }, { id: 'left', x: 9, y: 60, rot: -Math.PI / 2 }, { id: 'right', x: 111, y: 60, rot: Math.PI / 2 },
+    { id: 'ccw', x: 93, y: 12 }, { id: 'cw', x: 111, y: 28 },
+  ];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const geom = () => { const ax = viewer.camAxes(); const k = S * 0.24; const P = w => [S / 2 + dot(w, ax.x) * k, S / 2 - dot(w, ax.y) * k]; return { ax, P }; };
+  const aligned = () => Math.max(...viewer.camAxes().z.map(Math.abs)) > 0.995; // looking straight at a face
+  const cell = a => a > 0.45 ? 1 : a < -0.45 ? -1 : 0; // face split into 3 x 3: corners, edges, centre
+  function hit(mx, my) {
+    if (aligned()) for (const a of ARROWS) if (Math.hypot(mx - a.x, my - a.y) < 10) return { arrow: a.id };
+    const { ax, P } = geom(); let best = null;
+    for (const f of F) {
+      const vis = dot(f.n, ax.z); if (vis < 0.05) continue;
+      const c = P(f.n), pu = P([f.n[0] + f.u[0], f.n[1] + f.u[1], f.n[2] + f.u[2]]), pv = P([f.n[0] + f.v[0], f.n[1] + f.v[1], f.n[2] + f.v[2]]);
+      const U = [pu[0] - c[0], pu[1] - c[1]], V = [pv[0] - c[0], pv[1] - c[1]], d = U[0] * V[1] - U[1] * V[0]; if (Math.abs(d) < 1e-6) continue;
+      const dx = mx - c[0], dy = my - c[1]; const a = (dx * V[1] - dy * V[0]) / d, b = (U[0] * dy - U[1] * dx) / d;
+      if (Math.abs(a) <= 1 && Math.abs(b) <= 1 && (!best || vis > best.vis)) best = { f, a: cell(a), b: cell(b), vis };
+    }
+    return best;
+  }
+  const dirOf = h => [0, 1, 2].map(i => h.f.n[i] + h.a * h.f.u[i] + h.b * h.f.v[i]);
+  const hoverKey = h => !h ? null : h.arrow ? { arrow: h.arrow } : { dir: dirOf(h) };
+  function draw() {
+    if ($('#cubeBox').hidden || !viewer.ok) return;
+    const dpr = window.devicePixelRatio || 1; if (cv.width !== S * dpr) { cv.width = S * dpr; cv.height = S * dpr; }
+    const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, S, S);
+    const { ax, P } = geom(); const ink = '#1E2A24', panel = '#EEF2F0', line = '#8C9A93', acc = css('--accent') || '#3a8';
+    const faces = F.map(f => ({ f, vis: dot(f.n, ax.z) })).filter(o => o.vis > 0.02).sort((p, q) => p.vis - q.vis);
+    for (const { f, vis } of faces) {
+      const pt = (a, b) => P([f.n[0] + a * f.u[0] + b * f.v[0], f.n[1] + a * f.u[1] + b * f.v[1], f.n[2] + a * f.u[2] + b * f.v[2]]);
+      const quad = (a0, b0, a1, b1) => { c.beginPath(); [[a0, b0], [a1, b0], [a1, b1], [a0, b1]].forEach(([a, b], i) => { const [x, y] = pt(a, b); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); };
+      quad(-1, -1, 1, 1); c.globalAlpha = 0.96; c.fillStyle = panel; c.fill(); c.globalAlpha = 0.22 * (1 - vis); c.fillStyle = '#000'; c.fill(); c.globalAlpha = 1;
+      c.lineWidth = 1; c.strokeStyle = line; c.stroke();
+      if (hover && hover.dir) { // highlight the hovered face, edge or corner wherever it shows on this face
+        const dir = hover.dir; const fa = dot(dir, f.u), fb = dot(dir, f.v), fn = dot(dir, f.n);
+        if (fn > 0) { const r = v => v > 0 ? [0.45, 1] : v < 0 ? [-1, -0.45] : [-0.45, 0.45]; const [a0, a1] = r(fa), [b0, b1] = r(fb); quad(a0, b0, a1, b1); c.globalAlpha = 0.55; c.fillStyle = acc; c.fill(); c.globalAlpha = 1; }
+      }
+      const o = pt(0, 0), pu = pt(1, 0), pv = pt(0, -1); const k = 1 / 100;
+      c.save(); c.setTransform(dpr * (pu[0] - o[0]) * k, dpr * (pu[1] - o[1]) * k, dpr * (pv[0] - o[0]) * k, dpr * (pv[1] - o[1]) * k, dpr * o[0], dpr * o[1]);
+      c.fillStyle = ink; c.globalAlpha = 0.85; c.font = `700 ${f.t.length > 5 ? 26 : 30}px Archivo, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(f.t, 0, 2); c.restore();
+    }
+    const O = P([-1.25, -1.25, -1.25]); [[[1, 0, 0], '#E0372A'], [[0, 1, 0], '#3BB273'], [[0, 0, 1], '#3D7FE0']].forEach(([d, col]) => { const q = P([-1.25 + d[0] * 0.8, -1.25 + d[1] * 0.8, -1.25 + d[2] * 0.8]); c.beginPath(); c.moveTo(O[0], O[1]); c.lineTo(q[0], q[1]); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); });
+    if (aligned()) for (const a of ARROWS) {
+      const on = hover && hover.arrow === a.id; c.save(); c.translate(a.x, a.y);
+      c.fillStyle = on ? acc : panel; c.strokeStyle = on ? acc : line; c.lineWidth = 1.5;
+      if (a.rot !== undefined) { c.rotate(a.rot); c.beginPath(); c.moveTo(0, -6); c.lineTo(7, 4); c.lineTo(-7, 4); c.closePath(); c.globalAlpha = 0.95; c.fill(); c.globalAlpha = 1; c.strokeStyle = on ? acc : ink; c.lineWidth = 1; c.stroke(); }
+      else { // curved arrow; ccw turns the picture anticlockwise
+        const cw = a.id === 'cw'; c.strokeStyle = on ? acc : panel; c.lineWidth = 2.5; c.beginPath(); c.arc(0, 0, 6, cw ? -2.6 : -0.55, cw ? 0.55 : 2.6, !cw ? false : false); c.stroke();
+        const ea = cw ? 0.55 : -0.55 + Math.PI; // arrowhead at the end of the arc
+        const hx = 6 * Math.cos(cw ? 0.55 : 2.6), hy = 6 * Math.sin(cw ? 0.55 : 2.6); const tx = cw ? -Math.sin(0.55) : -Math.sin(2.6), ty = cw ? Math.cos(0.55) : Math.cos(2.6);
+        const sgn = cw ? 1 : -1; c.beginPath(); c.moveTo(hx + tx * 4 * sgn, hy + ty * 4 * sgn); c.lineTo(hx + Math.cos(ea - 1.6) * 3.5, hy + Math.sin(ea - 1.6) * 3.5); c.lineTo(hx - Math.cos(ea - 1.6) * 3.5, hy - Math.sin(ea - 1.6) * 3.5); c.closePath(); c.fillStyle = on ? acc : panel; c.fill();
+      }
+      c.restore();
+    }
+  }
+  const angDiff = (a, b) => { let d = (b - a) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; return d; };
+  function animateTo(to) {
+    const from = { yaw: viewer.yaw, pitch: viewer.pitch, roll: viewer.roll, dist: viewer.dist, target: viewer.target.slice() };
+    const t0 = performance.now(), T = 380; if (anim) cancelAnimationFrame(anim);
+    const my = ++token; let done = false;
+    const step = now => {
+      if (my !== token || done) return; const s = Math.min(1, (now - t0) / T), e = s < 0.5 ? 2 * s * s : 1 - (-2 * s + 2) ** 2 / 2; const m = (a, b) => a + (b - a) * e;
+      viewer.yaw = m(from.yaw, to.yaw); viewer.pitch = m(from.pitch, to.pitch); viewer.roll = m(from.roll, to.roll); viewer.dist = m(from.dist, to.dist); viewer.target = from.target.map((v, i) => m(v, to.target[i]));
+      viewer.render(); done = s >= 1; anim = done ? null : requestAnimationFrame(step);
+    };
+    if (document.hidden) { step(t0 + T); return; }
+    anim = requestAnimationFrame(step);
+    setTimeout(() => { if (my === token && !done) { cancelAnimationFrame(anim); step(t0 + T); } }, T + 250); // finish even if frames are throttled
+  }
+  function snap(dir) {
+    const l = Math.hypot(...dir); const d = dir.map(v => v / l); const lim = Math.PI / 2 - 0.002;
+    const pitch = Math.max(-lim, Math.min(lim, Math.asin(d[2]))); const yaw = Math.hypot(d[0], d[1]) < 1e-6 ? -Math.PI / 2 : Math.atan2(d[1], d[0]);
+    const keep = { yaw: viewer.yaw, pitch: viewer.pitch, roll: viewer.roll, dist: viewer.dist, target: viewer.target.slice() };
+    viewer.resetView(); const fit = { dist: viewer.dist, target: viewer.target.slice() }; Object.assign(viewer, keep);
+    animateTo({ yaw: keep.yaw + angDiff(keep.yaw, yaw), pitch, roll: keep.roll + angDiff(keep.roll, 0), ...fit });
+  }
+  function arrow(id) {
+    const { x, y } = viewer.camAxes();
+    if (id === 'cw' || id === 'ccw') { animateTo({ yaw: viewer.yaw, pitch: viewer.pitch, roll: viewer.roll + (id === 'cw' ? -1 : 1) * Math.PI / 2, dist: viewer.dist, target: viewer.target.slice() }); return; }
+    const r = v => v.map(Math.round); // the neighbouring face in that screen direction
+    snap(r({ up: y, down: y.map(v => -v), left: x.map(v => -v), right: x }[id]));
+  }
+  const local = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('pointerdown', e => { if (e.button !== 0) return; try { cv.setPointerCapture(e.pointerId); } catch (_) {} drag = { x: e.clientX, y: e.clientY, yaw: viewer.yaw, pitch: viewer.pitch, moved: false }; });
+  cv.addEventListener('pointermove', e => {
+    if (drag) { // drag the cube to orbit
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      if (!drag.moved) { drag.moved = true; token++; if (anim) cancelAnimationFrame(anim); hover = null; }
+      const lim = Math.PI / 2 - 0.002; viewer.yaw = drag.yaw - dx * 0.012; viewer.pitch = Math.max(-lim, Math.min(lim, drag.pitch + dy * 0.012)); viewer.render(); return;
+    }
+    const nh = hoverKey(hit(...local(e))); if (JSON.stringify(nh) !== JSON.stringify(hover)) { hover = nh; draw(); }
+  });
+  const end = e => {
+    if (!drag) return; const d = drag; drag = null;
+    if (d.moved || e.type === 'pointercancel') return;
+    const h = hit(...local(e)); if (!h) return;
+    if (h.arrow) arrow(h.arrow); else snap(dirOf(h));
+  };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+  cv.addEventListener('pointerleave', () => { if (!drag) { hover = null; draw(); } });
+  $('#cubeHome').addEventListener('click', () => snap([Math.cos(-1.05) * Math.cos(0.75), Math.sin(-1.05) * Math.cos(0.75), Math.sin(0.75)]));
+  return { draw, snap, hit, arrow, aligned };
+})();
+{ const baseRender = viewer.render.bind(viewer); viewer.render = () => { baseRender(); Cube.draw(); }; }
+viewer.onClick = (x, y) => { if (!P2.placing) return false; P2.placeKeyring(x, y); return true; };
+viewer.clickZ = () => P2.p ? P2.p.plateT + P2.p.spacerT + (viewer.ex || 0) : 0;
 const viewSeg = seg('#viewSeg', v => { P2.view = v; P2.show(); });
 $('#explode').addEventListener('input', () => { viewer.explode = +$('#explode').value; viewer.render(); });
-const joinSeg = seg('#joinSeg', v => { $('#screwRows').hidden = v !== 'screws'; $('#solventRows').hidden = v !== 'solvent'; P2.recompute(); });
-$('#keyring').addEventListener('change', () => { $('#keyRows').hidden = !$('#keyring').checked; P2.recompute(); });
+$('#showPhoto').addEventListener('change', () => { viewer.showPhoto = $('#showPhoto').checked; viewer.render(); });
+const joinSeg = seg('#joinSeg', v => { $('#noneRows').hidden = v !== 'none'; $('#screwRows').hidden = v !== 'screws'; $('#solventRows').hidden = v !== 'solvent'; P2.recompute(); });
+P2.keyPos = null; // where the keyring hole sits, as a fraction round the window edge; null until the user places it
+$('#keyring').addEventListener('change', () => { const on = $('#keyring').checked; $('#keyRows').hidden = !on; P2.setPlacing(on && P2.keyPos === null); P2.recompute(); });
+// Keyring placement: click the button, then click the case in either view.
+P2.placing = false;
+P2.setPlacing = function (on) {
+  P2.placing = on; $('#keyPlace').setAttribute('aria-pressed', String(on)); $('#keyPlace').textContent = on ? 'Cancel' : P2.keyPos === null ? 'Place the hole' : 'Move the hole';
+  $('#keyHint').textContent = on ? 'Click where you want the hole on the 3D model or the cut layout. It goes on the nearest edge. Esc cancels.' : P2.keyPos === null ? 'The hole isn’t placed yet.' : 'The hole is placed. Click Move the hole to put it somewhere else.';
+  $('#cv2').style.cursor = $('#cv3').style.cursor = on ? 'crosshair' : '';
+};
+$('#keyPlace').addEventListener('click', () => P2.setPlacing(!P2.placing));
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && P2.placing) P2.setPlacing(false); });
+P2.placeKeyring = function (x, y) { // x, y in case mm, y down
+  if (!P2.cs || !P2.cs.lines.cavity) return;
+  P2.keyPos = CaseGen.edgeParam(P2.cs.lines.cavity, x, y); P2.setPlacing(false); P2.recompute();
+};
 const recomputeDeb = debounce(() => P2.recompute(), 400);
-['#figT', '#clear', '#border', '#cornerR', '#keyD', '#keyPos', '#spacing', '#minScrews', '#edge', '#gOff', '#gW', '#gD', '#impScale'].forEach(id => $(id).addEventListener('input', recomputeDeb));
-['#plateT', '#spacerT', '#screw'].forEach(id => $(id).addEventListener('change', () => P2.recompute()));
-$('#file2').addEventListener('change', e => { const f = e.target.files[0]; if (f) P2.importFile(f); e.target.value = ''; });
-const useSample = () => {
-  const pts = []; for (let k = 0; k < 360; k++) { const a = k / 360 * 2 * Math.PI; const r = 34 + 7 * Math.sin(3 * a + 0.4) + 3.5 * Math.cos(5 * a) + 2 * Math.sin(7 * a); pts.push([r * Math.cos(a) * 1.15, r * Math.sin(a)]); }
-  P2.importLoop = pts; $('#impScale').value = 1; P2.source.set('import'); P2.sourceKind = 'import'; P2.dirty = true; P2.recompute();
-};
-$('#sample').addEventListener('click', useSample); $('#sample2').addEventListener('click', useSample);
-P2.importFile = function (f) {
-  const name = f.name.toLowerCase(); const rd = new FileReader();
-  rd.onload = () => {
-    try {
-      const loops = name.endsWith('.dxf') ? parseDXFLoops(rd.result) : parseSVGLoops(rd.result);
-      const lp = Geo.largest(loops.filter(l => l.length > 2));
-      if (!lp || Math.abs(Geo.area(lp)) < 1) { toast('No closed outline was found in that file.'); return; }
-      P2.importLoop = lp; $('#impScale').value = 1; P2.source.set('import'); P2.sourceKind = 'import'; P2.dirty = true; P2.recompute();
-      const b = Geo.bbox(lp); toast(`Imported ${f.name}: ${fmt(b.w)} × ${fmt(b.h)} mm`);
-    } catch (err) { console.error(err); toast('That file couldn’t be read: ' + err.message); }
-  };
-  rd.readAsText(f);
-};
+['#figT', '#clear', '#border', '#plateT', '#spacerT', '#cornerR', '#keyD', '#minScrews', '#edge', '#gOff', '#gW', '#gD'].forEach(id => $(id).addEventListener('input', recomputeDeb));
+['#screw'].forEach(id => $(id).addEventListener('change', () => P2.recompute()));
+$('#cbore').addEventListener('change', () => { $('#cboreHint').hidden = !$('#cbore').checked; P2.recompute(); });
+$('#toOutline').addEventListener('click', () => setPhase(1));
 P2.getFig = function () {
-  let lp = null; const k = P2.sourceKind;
-  if (k === 'traced' && P1.line && P1.mmPerPx) lp = P1.line;
-  else if (k === 'enlarged' && P2.enlSel() && P1.mmPerPx) lp = P2.enlSel().loop;
-  else if (k === 'import' && P2.importLoop) { const s = num('#impScale') || 1; lp = P2.importLoop.map(([x, y]) => [x * s, y * s]); }
-  if (!lp) return null;
-  const b = Geo.bbox(lp); return Geo.resample(lp.map(([x, y]) => [x - b.cx, y - b.cy]), 0.3);
+  if (!P1.line || !P1.mmPerPx) { P2.figOff = null; return null; }
+  const lp = P1.line; const b = Geo.bbox(lp); P2.figOff = [b.cx, b.cy];
+  return Geo.resample(lp.map(([x, y]) => [x - b.cx, y - b.cy]), 0.3);
 };
 P2.params = () => ({
-  figT: num('#figT'), clear: Math.max(0, num('#clear')), border: Math.max(2, num('#border')), plateT: num('#plateT'), spacerT: num('#spacerT'), cornerR: Math.max(0, num('#cornerR')),
-  keyring: $('#keyring').checked, keyringD: Math.max(1.5, num('#keyD')), keyringPos: num('#keyPos'),
-  join: joinSeg.value, screw: $('#screw').value, spacing: Math.max(10, num('#spacing')), minScrews: Math.max(2, Math.round(num('#minScrews'))), edge: Math.max(0.5, num('#edge')),
+  figT: num('#figT'), clear: Math.max(0, num('#clear')), border: Math.max(2, num('#border')), plateT: Math.max(0.5, num('#plateT')), spacerT: Math.max(0.5, num('#spacerT')), cornerR: Math.max(0, num('#cornerR')),
+  keyring: $('#keyring').checked && P2.keyPos !== null, keyringD: Math.max(1.5, num('#keyD')), keyringPos: P2.keyPos || 0,
+  join: joinSeg.value, screw: $('#screw').value, counterbore: $('#cbore').checked, minScrews: Math.max(2, Math.round(num('#minScrews'))), edge: Math.max(0.5, num('#edge')),
   grooveOffset: Math.max(0.3, num('#gOff')), grooveWidth: Math.max(0.2, num('#gW')), grooveDepth: Math.max(0.1, num('#gD')),
 });
 P2.enter = function () {
-  P2.fillEnlPick(); const es = P2.enlSel();
-  const hint = { traced: P1.line && P1.mmPerPx ? `Using the traced outline, ${fmt(Geo.bbox(P1.line).w)} × ${fmt(Geo.bbox(P1.line).h)} mm.` : 'Nothing traced yet. Trace an outline in the Outline tab, or import a file.',
-    enlarged: es && P1.mmPerPx ? `Using ${es.name}, ${fmt(Geo.bbox(es.loop).w)} × ${fmt(Geo.bbox(es.loop).h)} mm.` : 'There’s no enlarged line. Add one in step 4 of the Outline tab.',
-    import: P2.importLoop ? 'Using the imported outline.' : 'Import an SVG or DXF with a closed outline.' };
-  $('#srcHint').textContent = hint[P2.sourceKind];
+  if (!(P1.line && P1.mmPerPx)) $('#srcHint').textContent = 'Nothing traced yet. Set the scale and trace an outline in the Outline tab.';
   if (P2.dirty) P2.recompute(); else P2.show();
 };
 P2.show = function () {
   const has = !!P2.cs;
   $('#empty2').hidden = has; $('#cv2').hidden = !has || P2.view !== 'layout'; $('#cv3').hidden = !has || P2.view !== '3d';
-  $('#explodeBox').hidden = P2.view !== '3d'; $('#legend').hidden = !has || P2.view !== 'layout'; $('#tools').hidden = P2.view === '3d' && has;
+  $('#explodeBox').hidden = P2.view !== '3d'; $('#navHint').hidden = $('#cubeBox').hidden = !has || P2.view !== '3d'; if (P2.view !== '3d') $('#photoBox').hidden = true; else if (has) $('#photoBox').hidden = !viewer.photo; $('#legend').hidden = !has || P2.view !== 'layout'; $('#tools').hidden = P2.view === '3d' && has;
   if (has && P2.view === '3d') { if (!viewer.ok) { toast('3D preview needs WebGL, which isn’t available here. Showing the cut layout.'); viewSeg.set('layout'); P2.view = 'layout'; return P2.show(); } viewer.render(); }
   if (has && P2.view === 'layout') { if (!P2.lvOK) { P2.fitLayout(); P2.lvOK = cv2.getBoundingClientRect().width > 0; } P2.drawLayout(); }
 };
 P2.recompute = function () {
   if (phase !== 2) { P2.dirty = true; return; }
   const fig = P2.getFig();
-  if (!fig) { P2.cs = null; P2.show(); $('#analysis').hidden = true; $('#warnings').innerHTML = ''; $('#bom').innerHTML = ''; updateHud(); const h = { traced: 'Nothing traced yet. Trace an outline in the Outline tab, or import a file.', enlarged: 'There’s no enlarged line. Add one in step 4 of the Outline tab.', import: 'Import an SVG or DXF with a closed outline.' }; $('#srcHint').textContent = h[P2.sourceKind]; return; }
+  if (!fig) { P2.cs = null; P2.show(); $('#analysis').hidden = true; $('#warnings').innerHTML = ''; $('#bom').innerHTML = ''; updateHud(); $('#srcHint').textContent = 'Nothing traced yet. Set the scale and trace an outline in the Outline tab.'; return; }
   P2.dirty = false;
   later(() => {
     const p = P2.params(); const cs = CaseGen.build(fig, p); const ms = CaseGen.meshes(cs, p);
@@ -1688,23 +2028,44 @@ P2.recompute = function () {
     const st = p.spacerT, pt = p.plateT;
     viewer.setItems([
       { mesh: ms.back, color: [0.80, 0.90, 0.98], alpha: 0.32, edge: [0.55, 0.72, 0.85, 0.7], layer: 0, zc: pt / 2 },
-      { mesh: ms.figure, color: [0.28, 0.50, 0.36], alpha: 1, edge: [0.12, 0.25, 0.16, 0.6], layer: 1, zc: pt + p.figT / 2 },
+      { mesh: ms.figure, color: [0.90, 0.92, 0.91], alpha: 1, edge: [0.55, 0.60, 0.58, 0.5], layer: 1, zc: pt + p.figT / 2 },
       { mesh: ms.spacer, color: [0.42, 0.66, 0.90], alpha: 0.55, edge: [0.3, 0.5, 0.75, 0.8], layer: 1, zc: pt + st / 2 },
       { mesh: ms.front, color: [0.80, 0.90, 0.98], alpha: 0.32, edge: [0.55, 0.72, 0.85, 0.7], layer: 2, zc: pt * 1.5 + st },
-      { mesh: ms.screws, color: [0.62, 0.65, 0.69], alpha: 1, edge: [0, 0, 0, 0], layer: 2.6, zc: pt + st / 2 },
+      { mesh: ms.screwHeads, color: [0.62, 0.65, 0.69], alpha: 1, edge: [0, 0, 0, 0], layer: 2.6, zc: 2 * pt + st },
+      { mesh: ms.screwNuts, color: [0.55, 0.58, 0.62], alpha: 1, edge: [0, 0, 0, 0], layer: -0.6, zc: 0 },
     ], bb);
-    const key = P2.sourceKind + Geo.bbox(fig).w.toFixed(1) + (P2.sourceKind === 'enlarged' && P2.enlSel() ? P2.enlSel().id : ''); if (key !== P2.figKey) { P2.figKey = key; P2.lvOK = false; }
-    const hint = { traced: 'Using the traced outline', enlarged: 'Using ' + (P2.enlSel() ? P2.enlSel().name : 'the enlarged line'), import: 'Using the imported outline' }[P2.sourceKind];
-    const fb = Geo.bbox(cs.lines.figure); $('#srcHint').textContent = `${hint}, ${fmt(fb.w)} × ${fmt(fb.h)} mm.`; $('#t1sub').textContent = `${fmt(fb.w, 0)} × ${fmt(fb.h, 0)} mm`;
+    P2.updatePhoto(p);
+    const key = Geo.bbox(fig).w.toFixed(1) + ',' + Geo.bbox(fig).h.toFixed(1); if (key !== P2.figKey) { P2.figKey = key; P2.lvOK = false; }
+    const fb = Geo.bbox(cs.lines.figure); $('#srcHint').textContent = `Built from the traced outline, ${fmt(fb.w)} × ${fmt(fb.h)} mm. Edit it in the Outline tab.`;
     $('#t2sub').textContent = `${fmt(bb.w, 0)} × ${fmt(bb.h, 0)} mm`;
     P2.updateAnalysis(); P2.updateBOM(); P2.show(); updateHud();
   });
 };
+// A lightly shaded silhouette of the traced outline, laid on top of the object in the 3D view.
+P2.silhouetteCanvas = function () {
+  if (!P1.line || !P1.mmPerPx) return null;
+  const b = Geo.bbox(P1.line), pad = 1, x0 = b.x0 - pad, y0 = b.y0 - pad, x1 = b.x1 + pad, y1 = b.y1 + pad;
+  const k = Math.min(10, 2048 / Math.max(x1 - x0, y1 - y0)); // px per mm
+  const c = document.createElement('canvas'); c.width = Math.max(2, Math.round((x1 - x0) * k)); c.height = Math.max(2, Math.round((y1 - y0) * k));
+  const x = c.getContext('2d'); x.beginPath();
+  P1.line.forEach(([mx, my], i) => { const X = (mx - x0) * k, Y = (my - y0) * k; i ? x.lineTo(X, Y) : x.moveTo(X, Y); });
+  x.closePath(); x.fillStyle = 'rgba(52, 78, 66, 0.62)'; x.fill();
+  x.lineJoin = 'round'; x.lineCap = 'round'; x.lineWidth = Math.max(3, 0.8 * k); x.setLineDash([2.2 * k, 1.4 * k]); x.strokeStyle = 'rgba(12, 24, 18, 1)'; x.stroke(); x.setLineDash([]);
+  return { canvas: c, x0, y0, x1, y1 };
+};
+P2.updatePhoto = function (p) {
+  const ph = P2.figOff ? P2.silhouetteCanvas() : null;
+  $('#photoBox').hidden = !ph;
+  if (!ph) { viewer.setPhoto(null); return; }
+  const [ox, oy] = P2.figOff;
+  viewer.setPhoto({ canvas: ph.canvas, x0: ph.x0 - ox, y0: ph.y0 - oy, x1: ph.x1 - ox, y1: ph.y1 - oy, z: p.plateT + p.figT + 0.08, layer: 1 });
+};
 P2.updateAnalysis = function () {
-  const cs = P2.cs, p = P2.p, box = $('#analysis'); box.hidden = false;
-  if (cs.analysis) {
+  const cs = P2.cs, p = P2.p, box = $('#analysis'); box.hidden = !cs.analysis && !cs.grooves;
+  if (!cs.analysis && !cs.grooves) { box.innerHTML = ''; $('#t3sub').textContent = 'Not yet'; }
+  else if (cs.analysis) {
     const a = cs.analysis;
-    box.innerHTML = `<dl><dt>Screws needed</dt><dd>${a.screws.length} × ${p.screw} × ${a.length} mm</dd><dt>Screw line around the window</dt><dd>${fmt(a.pathLength, 0)} mm</dd><dt>Longest gap between screws</dt><dd>${fmt(a.maxGap)} mm</dd><dt>Thinnest material beside a hole</dt><dd>${fmt(a.minClear)} mm</dd><dt>Stack thickness</dt><dd>${fmt(a.stack)} mm</dd></dl><p class="hint" style="margin:8px 0 0">Screws sit midway between the window and the outer edge. ${a.screws.length} keeps every gap near or under ${p.spacing} mm; each hole has at least ${p.edge} mm of acrylic beside it.</p>`;
+    box.innerHTML = `<dl><dt>Screws needed</dt><dd>${a.screws.length} × ${p.screw} × ${a.length} mm</dd><dt>Screw line around the window</dt><dd>${fmt(a.pathLength, 0)} mm</dd><dt>Longest gap between screws</dt><dd>${fmt(a.maxGap)} mm (allowed ${fmt(a.span, 0)} mm)</dd><dt>Thinnest material beside a hole</dt><dd>${fmt(a.minClear)} mm</dd><dt>Stack thickness</dt><dd>${fmt(a.stack)} mm</dd>${a.cb ? `<dt>Head pockets</dt><dd>⌀${fmt(a.cb.headD)} × ${fmt(a.cb.headDepth)} mm deep</dd><dt>Nut pockets</dt><dd>${fmt(2 * a.cb.nutR)} mm hex × ${fmt(a.cb.nutDepth)} mm deep</dd>` : ''}</dl><p class="hint" style="margin:8px 0 0">${a.screws.length} is the fewest that works. Each stretch of ${fmt(p.plateT)} mm plate between screws is treated as a beam clamped at both ends; with a ${fmt(p.border)} mm border it can span ${fmt(a.span, 0)} mm before a firm press opens the edge more than ${CaseGen.SPAN.delta} mm. The screws also surround the middle of the case so it can’t rock, and each hole has at least ${p.edge} mm of acrylic beside it.</p>`;
     $('#t3sub').textContent = `${a.screws.length} × ${p.screw}`;
   } else {
     box.innerHTML = `<dl><dt>Groove</dt><dd>${fmt(p.grooveWidth)} mm wide, ${fmt(p.grooveDepth, 2)} mm deep</dd><dt>Distance from window</dt><dd>${fmt(p.grooveOffset)} mm</dd></dl><p class="hint" style="margin:8px 0 0">Engrave the groove, flip the spacer and engrave the other face too. Apply solvent from the outer edge and let it wick in up to the groove.</p>`;
@@ -1721,8 +2082,9 @@ P2.bomRows = function () {
   ];
   if (cs.analysis) {
     const a = cs.analysis, n = a.screws.length;
-    rows.push([`Screw`, `${p.screw} × ${a.length} mm pan head`, n, `${a.spec.hole} mm holes`], ['Nut', `${p.screw} hex nut`, n, ''], ['Washer', `${p.screw} nylon washer`, 2 * n, 'Under the head and the nut']);
-  } else rows.push(['Solvent cement', 'Acrylic solvent cement', 1, 'With a needle applicator']);
+    if (a.cb) rows.push([`Screw`, `${p.screw} × ${a.length} mm pan head`, n, a.cb.trim ? `Cut to ${a.cb.trim} mm so the end sits flush` : 'Head sits flush in its pocket'], ['Nut', `${p.screw} hex nut`, n, 'Sits flush in its hex pocket']);
+    else rows.push([`Screw`, `${p.screw} × ${a.length} mm pan head`, n, `${a.spec.hole} mm holes`], ['Nut', `${p.screw} hex nut`, n, ''], ['Washer', `${p.screw} nylon washer`, 2 * n, 'Under the head and the nut']);
+  } else if (cs.grooves) rows.push(['Solvent cement', 'Acrylic solvent cement', 1, 'With a needle applicator']);
   if (p.keyring) rows.push(['Keyring', 'Split ring or jump ring', 1, `Fits a ${p.keyringD} mm hole`]);
   rows.push(['Your object', `${p.figT} mm thick`, 1, '']);
   return rows;
@@ -1754,45 +2116,66 @@ P2.drawLayout = function () {
     const [X, Y] = T(h.x, h.y); c.beginPath(); c.arc(X, Y, Math.max(1.5 * dpr, h.d / 2 * P2.lv.s * dpr), 0, Math.PI * 2); c.strokeStyle = cut; c.lineWidth = 2 * dpr; c.stroke();
     if (h.kind === 'screw') { c.fillStyle = ink; c.font = `600 ${11 * dpr}px Archivo, sans-serif`; c.fillText(String(h.n), X + (h.d / 2 * P2.lv.s + 4) * dpr, Y - 4 * dpr); }
   }
-  $('#legEng').hidden = !cs.grooves; $('#legScrew').hidden = !cs.analysis;
+  if (cs.analysis && cs.analysis.cb) for (const s of cs.analysis.screws) { const [X, Y] = T(s.x, s.y); c.beginPath(); c.arc(X, Y, cs.analysis.cb.headD / 2 * P2.lv.s * dpr, 0, Math.PI * 2); c.strokeStyle = eng; c.lineWidth = 1.5 * dpr; c.stroke(); }
+  $('#legEng').hidden = !cs.grooves && !(cs.analysis && cs.analysis.cb); $('#legScrew').hidden = !cs.analysis;
 };
 (() => {
   let st = null; const pts = new Map();
-  cv2.addEventListener('pointerdown', e => { cv2.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); st = { x: e.clientX, y: e.clientY, v: { ...P2.lv } }; });
+  cv2.addEventListener('pointerdown', e => { try { cv2.setPointerCapture(e.pointerId); } catch (_) {} pts.set(e.pointerId, [e.clientX, e.clientY]); st = { x: e.clientX, y: e.clientY, v: { ...P2.lv } }; });
   cv2.addEventListener('pointermove', e => { if (!pts.has(e.pointerId) || !st) return; P2.lv = { ...st.v, tx: st.v.tx + e.clientX - st.x, ty: st.v.ty + e.clientY - st.y }; P2.drawLayout(); });
-  const up = e => { pts.delete(e.pointerId); st = null; };
+  const up = e => {
+    if (st && P2.placing && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 5) { const r = cv2.getBoundingClientRect(); P2.placeKeyring((e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s); }
+    pts.delete(e.pointerId); st = null;
+  };
   cv2.addEventListener('pointerup', up); cv2.addEventListener('pointercancel', up);
-  cv2.addEventListener('wheel', e => { e.preventDefault(); const r = cv2.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top; const k = Math.exp(-e.deltaY * 0.0015); const v = P2.lv; P2.lv = { s: v.s * k, tx: x - (x - v.tx) * k, ty: y - (y - v.ty) * k }; P2.drawLayout(); }, { passive: false });
+  cv2.addEventListener('wheel', e => { e.preventDefault(); const r = cv2.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top; const g = wheelGesture(e); const v = P2.lv; if (g.pan) { P2.lv = { ...v, tx: v.tx + g.pan[0], ty: v.ty + g.pan[1] }; P2.drawLayout(); return; } const k = g.zoom; P2.lv = { s: v.s * k, tx: x - (x - v.tx) * k, ty: y - (y - v.ty) * k }; P2.drawLayout(); }, { passive: false });
 })();
 // exports
 $$('[data-exp2]').forEach(b => b.addEventListener('click', () => P2.export(b.dataset.exp2)));
 P2.export = function (kind) {
   const cs = P2.cs, p = P2.p; if (!cs) { toast('There’s no case to export yet.'); return; }
   const circles = cs.holes.map(h => ({ x: h.x, y: h.y, d: h.d }));
-  if (kind === 'laser') {
+  const laserFiles = () => {
     const bb = Geo.bbox(cs.lines.outer); const dx = bb.w + 5;
     const sh = (l, o) => l.map(([x, y]) => [x + o, y]); const shc = (cc, o) => cc.map(c => ({ ...c, x: c.x + o }));
-    const plates = [{ layer: 'CUT', id: 'plates', loops: [cs.lines.outer, sh(cs.lines.outer, dx)], circles: circles.concat(shc(circles, dx)) }];
+    let plates = [{ layer: 'CUT', id: 'plates', loops: [cs.lines.outer, sh(cs.lines.outer, dx)], circles: circles.concat(shc(circles, dx)) }];
+    const cb = cs.analysis && cs.analysis.cb;
+    if (cb) {
+      // The back plate is drawn mirrored so its nut pockets can be engraved face up; flip it over to assemble.
+      const mx = (x) => 2 * bb.cx - x + dx; const mir = l => l.map(([x, y]) => [mx(x), y]).reverse();
+      const ring = (x, y, r, n, a0 = 0) => Array.from({ length: n }, (_, k) => [x + r * Math.cos(a0 + 2 * Math.PI * k / n), y + r * Math.sin(a0 + 2 * Math.PI * k / n)]);
+      plates = [
+        { layer: 'CUT', id: 'plates', loops: [cs.lines.outer, mir(cs.lines.outer)], circles: circles.concat(circles.map(c => ({ ...c, x: mx(c.x) }))) },
+        { layer: 'ENGRAVE', id: 'head-pockets', loops: cs.analysis.screws.map(s => ring(s.x, s.y, cb.headD / 2, 48)) },
+        { layer: 'ENGRAVE', id: 'nut-pockets', loops: cs.analysis.screws.map(s => ring(mx(s.x), s.y, cb.nutR, 6)) },
+      ];
+    }
     const spacer = [{ layer: 'CUT', id: 'spacer-cut', loops: [cs.lines.outer, cs.lines.cavity], circles }];
     if (cs.grooves) spacer.push({ layer: 'ENGRAVE', id: 'spacer-groove', loops: [cs.grooves.inner, cs.grooves.outer] });
     const pn = `front-and-back-plates_${p.plateT}mm_acrylic`, sn = `spacer_${p.spacerT}mm_acrylic`;
     const readme = [`Laser files for your acrylic case`, ``, `Units: millimetres. Red = cut. Blue = engrave.`, `Case size: ${fmt(bb.w)} x ${fmt(bb.h)} mm.`, ``,
-      `${pn}: cut once from ${p.plateT} mm clear acrylic. This sheet holds both plates.`,
+      `${pn}: cut once from ${p.plateT} mm clear acrylic. This sheet holds both plates.` + (cb ? ` Left = front plate, right = back plate (drawn mirrored). Raster-engrave the blue pockets first: round head pockets ${fmt(cb.headDepth)} mm deep on the front plate, hex nut pockets ${fmt(cb.nutDepth)} mm deep on the back plate. Test the depth on scrap. Then cut. Flip the back plate over so its pockets face out.` : ''),
       `${sn}: cut from ${p.spacerT} mm acrylic.` + (cs.grooves ? ` Engrave the blue groove first, ${p.grooveDepth} mm deep, then flip the spacer and engrave the other face. Cut last.` : ''),
       ``, `Cut holes and inner shapes before outer outlines so parts don't shift.`, `Kerf (about 0.1-0.2 mm) makes holes slightly larger and outlines slightly smaller. That only adds clearance.`,
-      cs.analysis ? `Hardware: ${cs.analysis.screws.length} x ${p.screw} x ${cs.analysis.length} mm screws, nuts and ${2 * cs.analysis.screws.length} washers.` : `Join with acrylic solvent cement applied from the outer edge.`].join('\n');
-    saveFile('acrylic-case-laser-files.zip', makeZip([
+      cs.analysis ? (cb ? `Hardware: ${cs.analysis.screws.length} x ${p.screw} x ${cs.analysis.length} mm screws${cb.trim ? ` cut to ${cb.trim} mm` : ''} and nuts. No washers: heads and nuts sit in their pockets.` : `Hardware: ${cs.analysis.screws.length} x ${p.screw} x ${cs.analysis.length} mm screws, nuts and ${2 * cs.analysis.screws.length} washers.`) : cs.grooves ? `Join with acrylic solvent cement applied from the outer edge.` : `No join method chosen yet.`].join('\n');
+    return [
       { name: pn + '.dxf', data: toDXF(plates) }, { name: pn + '.svg', data: toSVG(plates) },
       { name: sn + '.dxf', data: toDXF(spacer) }, { name: sn + '.svg', data: toSVG(spacer) },
-      { name: 'README.txt', data: readme }]));
-  } else if (kind === 'stl') {
+      { name: 'README.txt', data: readme }];
+  };
+  const stlFiles = () => {
     const m = P2.meshes; const files = [{ name: 'back_plate.stl', data: toSTL(m.back, 'back plate') }, { name: 'spacer.stl', data: toSTL(m.spacer, 'spacer') }, { name: 'front_plate.stl', data: toSTL(m.front, 'front plate') }, { name: 'object_reference.stl', data: toSTL(m.figure, 'object') }];
     if (m.screws) files.push({ name: 'screws_reference.stl', data: toSTL(m.screws, 'screws') });
-    saveFile('acrylic-case-3d-parts.zip', makeZip(files));
-  } else if (kind === 'csv') {
-    const q = s => '"' + String(s).replace(/"/g, '""') + '"';
-    saveFile('acrylic-case-parts.csv', ['Part,Spec,Qty,Notes', ...P2.bomRows().map(r => [r[0], r[1], r[2], r[3]].map(q).join(','))].join('\n') + '\n');
-  }
+    return files;
+  };
+  const csv = () => { const q = s => '"' + String(s).replace(/"/g, '""') + '"'; return ['Part,Spec,Qty,Notes', ...P2.bomRows().map(r => [r[0], r[1], r[2], r[3]].map(q).join(','))].join('\n') + '\n'; };
+  if (kind === 'laser') saveFile('acrylic-case-laser-files.zip', makeZip(laserFiles()));
+  else if (kind === 'stl') saveFile('acrylic-case-3d-parts.zip', makeZip(stlFiles()));
+  else if (kind === 'csv') saveFile('acrylic-case-parts.csv', csv());
+  else if (kind === 'all') saveFile('acrylic-case.zip', makeZip([
+    ...laserFiles().map(f => ({ ...f, name: 'laser/' + f.name })),
+    ...stlFiles().map(f => ({ ...f, name: '3d-parts/' + f.name })),
+    { name: 'parts-list.csv', data: csv() }]));
 };
 
 /* ================= init ================= */

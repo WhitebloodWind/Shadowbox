@@ -40,6 +40,15 @@ async function saveFile(filename, data) {
 const enc = s => new TextEncoder().encode(s);
 const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+// Wheel input: a trackpad pinch arrives as ctrl + wheel in small steps, a two-finger drag as plain
+// wheel events with fine (often fractional, often sideways) deltas, and a mouse wheel in whole notches.
+// Returns { zoom: factor > 1 to zoom in } or { pan: [dx, dy] in screen px, as if dragging the content }.
+function wheelGesture(e) {
+  const u = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1; const dx = e.deltaX * u, dy = e.deltaY * u;
+  if (e.ctrlKey) return { zoom: Math.exp(-dy * 0.012) };
+  const notch = e.deltaMode !== 0 || (dx === 0 && Number.isInteger(dy) && Math.abs(dy) >= 50 && (e.wheelDeltaY === undefined || e.wheelDeltaY === 0 || e.wheelDeltaY % 120 === 0));
+  return notch ? { zoom: Math.exp(-dy * 0.0015) } : { pan: [-dx, -dy] };
+}
 function makeZip(files) { // [{name, data: Uint8Array|string}]
   const parts = [], central = []; let offset = 0;
   for (const f of files) {
@@ -141,7 +150,7 @@ function setPhase(p) {
   $('#cv1').hidden = p !== 1; $('#tools').hidden = p === 1 && !P1.img;
   $('#empty1').hidden = !(p === 1 && !P1.img);
   $('#viewtabs').hidden = p !== 2;
-  if (p === 2) P2.enter(); else { $('#cv2').hidden = true; $('#cv3').hidden = true; $('#empty2').hidden = true; $('#legend').hidden = true; P1.resize(); }
+  if (p === 2) P2.enter(); else { $('#cubeBox').hidden = true; $('#cv2').hidden = true; $('#cv3').hidden = true; $('#empty2').hidden = true; $('#legend').hidden = true; P1.resize(); }
   updateHud();
 }
 $('#tab1').addEventListener('click', () => setPhase(1));
@@ -202,7 +211,7 @@ P1.load = function (file) {
   im.onerror = () => toast('That file couldn’t be opened as an image.');
   im.src = url;
 };
-P1.setWork = function (c) { P1.work = c; P1.W = c.width; P1.H = c.height; P1.erase = new Uint8Array(P1.W * P1.H); P1.eraseCv = null; };
+P1.setWork = function (c) { P1.work = c; P1.W = c.width; P1.H = c.height; P1.erase = new Uint8Array(P1.W * P1.H); P1.eraseCv = null; P1.eraseUndo = []; P1.eraseRedo = []; if (P1.updateEraseBtns) P1.updateEraseBtns(); };
 P1.resetTrace = function () { P1.contour = P1.keys = P1.line = null; for (const e of P1.enl) e.loop = null; P1.maskCv = null; P1.seed = null; P1.sel = -1; P1.traceDone = false; $('#traceInfo').hidden = true; $('#s3sub').textContent = ''; if (P1.updateEnlInfo) { P1.updateEnlInfo(); P1.renderExport(); } };
 function markDone(panel, n, v) { const s = $(`${panel} .step[data-step="${n}"]`); if (s) s.classList.toggle('done', v); }
 P1.onStep = function (n) { P1.step = +n; P1.draw(); };
@@ -274,7 +283,7 @@ P1.rectify = function (pts, wmm, hmm) {
 const toolSeg = seg('#toolSeg', v => {
   P1.tool = v; $('#brushRow').hidden = v !== 'erase';
   $('#toolHint').textContent = v === 'edit' ? 'Drag a point to move it. Double-click the line to add a point. Select a point and press Delete to remove it.'
-    : v === 'pick' ? 'Click the object you want if the trace picked the wrong one.' : 'Paint over anything that shouldn’t be part of the object, like a keyring or a shadow.';
+    : v === 'pick' ? 'Click the object you want if the trace picked the wrong one.' : P1.eraseHint();
   P1.draw();
 });
 $('#brush').addEventListener('input', () => $('#brushV').textContent = $('#brush').value + ' mm');
@@ -284,7 +293,29 @@ const retrace = debounce(() => { if (P1.traceDone) P1.runTrace(); }, 350);
 ['#thrAuto', '#dark', '#even'].forEach(id => $(id).addEventListener('change', () => retrace()));
 $('#detail').addEventListener('change', () => { if (P1.contour) { P1.makeKeys(); P1.updateLine(); } });
 $('#smooth').addEventListener('change', () => { if (P1.keys) P1.updateLine(); });
-$('#clearErase').addEventListener('click', () => { P1.erase.fill(0); P1.eraseCv = null; P1.draw(); retrace(); });
+// Erasing: paint to erase, paint with Restore to bring areas back, undo and redo strokes.
+P1.eraseMode = 'add'; P1.eraseUndo = []; P1.eraseRedo = [];
+P1.eraseHint = () => P1.eraseMode === 'add' ? 'Paint over anything that shouldn’t be part of the object, like a keyring or a shadow.' : 'Paint over erased (red) areas to bring them back.';
+const eraseSeg = seg('#eraseSeg', v => { P1.eraseMode = v; $('#toolHint').textContent = P1.eraseHint(); });
+P1.updateEraseBtns = () => { $('#undoErase').disabled = !P1.eraseUndo.length; $('#redoErase').disabled = !P1.eraseRedo.length; };
+P1.eraseSnapshot = () => { P1.eraseUndo.push(P1.erase.slice()); if (P1.eraseUndo.length > 30) P1.eraseUndo.shift(); P1.eraseRedo = []; P1.updateEraseBtns(); };
+P1.rebuildEraseCv = function () { // redraw the red overlay from the mask
+  const W = P1.W, H = P1.H; let any = false; for (let i = 0; i < P1.erase.length; i++) if (P1.erase[i]) { any = true; break; }
+  if (!any) { P1.eraseCv = null; return; }
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'); const im = x.createImageData(W, H);
+  for (let i = 0; i < P1.erase.length; i++) if (P1.erase[i]) { const o = i * 4; im.data[o] = 0xE0; im.data[o + 1] = 0x37; im.data[o + 2] = 0x2A; im.data[o + 3] = 255; }
+  x.putImageData(im, 0, 0); P1.eraseCv = c;
+};
+P1.swapErase = function (from, to) { if (!from.length) return; to.push(P1.erase.slice()); P1.erase = from.pop(); P1.rebuildEraseCv(); P1.updateEraseBtns(); P1.draw(); retrace(); };
+$('#undoErase').addEventListener('click', () => P1.swapErase(P1.eraseUndo, P1.eraseRedo));
+$('#redoErase').addEventListener('click', () => P1.swapErase(P1.eraseRedo, P1.eraseUndo));
+document.addEventListener('keydown', e => {
+  if (phase !== 1 || P1.step !== 3 || P1.tool !== 'erase' || !(e.ctrlKey || e.metaKey) || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); P1.swapErase(P1.eraseUndo, P1.eraseRedo); }
+  else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); P1.swapErase(P1.eraseRedo, P1.eraseUndo); }
+});
+$('#clearErase').addEventListener('click', () => { if (!P1.eraseCv) return; P1.eraseSnapshot(); P1.erase.fill(0); P1.eraseCv = null; P1.draw(); retrace(); });
 $('#delPt').addEventListener('click', () => P1.deleteSel());
 document.addEventListener('keydown', e => {
   if (phase !== 1 || P1.step !== 3 || P1.sel < 0) return;
@@ -468,7 +499,7 @@ P1.export = function (kind) {
 };
 $('#toCase').addEventListener('click', () => {
   if (!P1.line || !P1.mmPerPx) { toast('Trace an outline and set the scale first.'); return; }
-  P2.source.set(P1.enl.some(e => e.loop) ? 'enlarged' : 'traced'); P2.sourceKind = P2.source.value; P2.dirty = true; setPhase(2);
+  P2.dirty = true; setPhase(2);
 });
 P1.renderExport();
 
@@ -524,6 +555,30 @@ P1.draw = function () {
     if (P1.hover) P1.drawLoupe(c, dpr);
   }
 };
+// Brush outline: shows the eraser or restore brush at its real size under the cursor.
+{
+  const baseDraw = P1.draw;
+  P1.draw = function () {
+    baseDraw();
+    const erasing = phase === 1 && P1.step === 3 && P1.tool === 'erase' && P1.work;
+    cv1.style.cursor = erasing ? 'none' : '';
+    if (!erasing || !P1.brushAt) return;
+    const dpr = window.devicePixelRatio || 1, c = ctx1; const [x, y] = P1.brushAt;
+    const r = Math.max(1, num('#brush') / P1.unit() * P1.view.s) * dpr; const add = P1.eraseMode !== 'remove';
+    c.save(); c.setTransform(1, 0, 0, 1, 0, 0);
+    c.beginPath(); c.arc(x * dpr, y * dpr, r, 0, Math.PI * 2);
+    c.fillStyle = add ? 'rgba(224,55,42,0.18)' : 'rgba(60,190,120,0.18)'; c.fill();
+    c.lineWidth = 3 * dpr; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.stroke();
+    c.lineWidth = 1.5 * dpr; c.strokeStyle = add ? '#FF6B5E' : '#5EE09A'; c.stroke();
+    c.beginPath(); c.moveTo(x * dpr - 4 * dpr, y * dpr); c.lineTo(x * dpr + 4 * dpr, y * dpr); c.moveTo(x * dpr, y * dpr - 4 * dpr); c.lineTo(x * dpr, y * dpr + 4 * dpr);
+    c.lineWidth = 1.5 * dpr; c.strokeStyle = '#fff'; c.stroke();
+    c.font = `600 ${11 * dpr}px Archivo, sans-serif`; c.fillStyle = '#fff'; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 3 * dpr;
+    const label = `${add ? 'Erase' : 'Restore'} ${num('#brush')} mm`; const tx = x * dpr + r * 0.72 + 6 * dpr, ty = y * dpr - r * 0.72 - 4 * dpr;
+    c.strokeText(label, tx, ty); c.fillText(label, tx, ty);
+    c.restore();
+  };
+}
+$('#brush').addEventListener('input', () => { if (P1.brushAt) P1.draw(); });
 P1.drawLoupe = function (c, dpr) {
   const [wx, wy] = P1.hover; const R = 64, z = 5; const cx = cv1.width - (R + 16) * dpr, cy = (R + 56) * dpr;
   c.save(); c.beginPath(); c.arc(cx, cy, R * dpr, 0, Math.PI * 2); c.clip();
@@ -548,11 +603,12 @@ cv1.addEventListener('pointerdown', e => {
   const near = (pts, conv) => { let bi = -1, bd = 12; pts.forEach((p, i) => { const [sx, sy] = toScreen(...conv(p)); const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; bi = i; } }); return bi; };
   if (P1.step === 2) { const i = near(P1.cal.pts, p => p); if (i >= 0) drag = { type: 'cal', i }; }
   else if (P1.step === 3 && P1.tool === 'edit' && P1.keys) { const i = near(P1.keys, p => [mm2px(p[0]), mm2px(p[1])]); if (i >= 0) { drag = { type: 'key', i }; P1.sel = i; $('#delPt').disabled = false; P1.draw(); } }
-  else if (P1.step === 3 && P1.tool === 'erase') { drag = { type: 'erase' }; P1.paint(wx, wy); }
+  else if (P1.step === 3 && P1.tool === 'erase') { P1.eraseSnapshot(); drag = { type: 'erase', last: [wx, wy] }; P1.paint(wx, wy); }
 });
 cv1.addEventListener('pointermove', e => {
   const [x, y] = localXY(e, cv1); const [wx, wy] = toWork(x, y);
   if (P1.step === 2 && P1.work) { P1.hover = [wx, wy]; if (!drag) P1.draw(); }
+  if (P1.step === 3 && P1.tool === 'erase' && P1.work) { P1.brushAt = [x, y]; if (!drag) P1.draw(); } else if (P1.brushAt) { P1.brushAt = null; }
   if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, [x, y]);
   if (!drag) return;
   if (drag.type === 'pinch' && ptrs.size === 2) {
@@ -562,7 +618,10 @@ cv1.addEventListener('pointermove', e => {
   }
   if (drag.type === 'cal') { P1.cal.pts[drag.i] = [wx, wy]; P1.draw(); return; }
   if (drag.type === 'key') { const u = P1.unit(); P1.keys[drag.i] = [wx * u, wy * u]; P1.line = $('#smooth').checked ? Geo.catmull(P1.keys, 0.3 * (P1.mmPerPx ? 1 : 10)) : P1.keys.slice(); P1.draw(); return; }
-  if (drag.type === 'erase') { P1.paint(wx, wy); return; }
+  if (drag.type === 'erase') { // fill in between samples so fast strokes stay continuous
+    const [lx, ly] = drag.last; const r = num('#brush') / P1.unit(); const n = Math.max(1, Math.ceil(Math.hypot(wx - lx, wy - ly) / Math.max(0.5, r * 0.5)));
+    for (let i = 1; i <= n; i++) P1.paint(lx + (wx - lx) * i / n, ly + (wy - ly) * i / n, i < n); drag.last = [wx, wy]; return;
+  }
   if (drag.type === 'maybe' || drag.type === 'pan') {
     if (Math.hypot(x - drag.sx, y - drag.sy) > 4) drag.type = 'pan';
     if (drag.type === 'pan') { P1.view = { ...drag.view, tx: drag.view.tx + x - drag.sx, ty: drag.view.ty + y - drag.sy }; P1.draw(); }
@@ -584,7 +643,7 @@ function endPtr(e) {
 cv1.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
 cv1.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
 cv1.addEventListener('pointerup', endPtr); cv1.addEventListener('pointercancel', endPtr);
-cv1.addEventListener('pointerleave', () => { if (P1.hover) { P1.hover = null; P1.draw(); } });
+cv1.addEventListener('pointerleave', () => { if (P1.hover || P1.brushAt) { P1.hover = null; P1.brushAt = null; P1.draw(); } });
 cv1.addEventListener('dblclick', e => {
   if (P1.step !== 3 || P1.tool !== 'edit' || !P1.keys) return;
   const [x, y] = localXY(e, cv1); const [wx, wy] = toWork(x, y); const u = P1.unit(); const p = [wx * u, wy * u];
@@ -593,15 +652,16 @@ cv1.addEventListener('dblclick', e => {
   K.splice(bi + 1, 0, p); P1.sel = bi + 1; $('#delPt').disabled = false; P1.updateLine();
 });
 cv1.addEventListener('wheel', e => {
-  e.preventDefault(); const [x, y] = localXY(e, cv1); const k = Math.exp(-e.deltaY * 0.0015); const v = P1.view;
-  P1.view = { s: v.s * k, tx: x - (x - v.tx) * k, ty: y - (y - v.ty) * k }; P1.draw();
+  e.preventDefault(); const [x, y] = localXY(e, cv1); const g = wheelGesture(e); const v = P1.view;
+  if (g.pan) { P1.view = { ...v, tx: v.tx + g.pan[0], ty: v.ty + g.pan[1] }; P1.draw(); return; }
+  const k = g.zoom; P1.view = { s: v.s * k, tx: x - (x - v.tx) * k, ty: y - (y - v.ty) * k }; P1.draw();
 }, { passive: false });
-P1.paint = function (wx, wy) {
-  const r = num('#brush') / P1.unit(); const W = P1.W, H = P1.H;
-  if (!P1.eraseCv) { P1.eraseCv = document.createElement('canvas'); P1.eraseCv.width = W; P1.eraseCv.height = H; }
-  const ec = P1.eraseCv.getContext('2d'); ec.fillStyle = '#E0372A'; ec.beginPath(); ec.arc(wx, wy, r, 0, Math.PI * 2); ec.fill();
-  for (let y = Math.max(0, Math.floor(wy - r)); y <= Math.min(H - 1, Math.ceil(wy + r)); y++) for (let x = Math.max(0, Math.floor(wx - r)); x <= Math.min(W - 1, Math.ceil(wx + r)); x++) if ((x + 0.5 - wx) ** 2 + (y + 0.5 - wy) ** 2 <= r * r) P1.erase[y * W + x] = 1;
-  P1.draw();
+P1.paint = function (wx, wy, noDraw) {
+  const r = num('#brush') / P1.unit(); const W = P1.W, H = P1.H; const add = P1.eraseMode !== 'remove';
+  if (!P1.eraseCv) { if (!add) return; P1.eraseCv = document.createElement('canvas'); P1.eraseCv.width = W; P1.eraseCv.height = H; }
+  const ec = P1.eraseCv.getContext('2d'); ec.globalCompositeOperation = add ? 'source-over' : 'destination-out'; ec.fillStyle = '#E0372A'; ec.beginPath(); ec.arc(wx, wy, r, 0, Math.PI * 2); ec.fill(); ec.globalCompositeOperation = 'source-over';
+  for (let y = Math.max(0, Math.floor(wy - r)); y <= Math.min(H - 1, Math.ceil(wy + r)); y++) for (let x = Math.max(0, Math.floor(wx - r)); x <= Math.min(W - 1, Math.ceil(wx + r)); x++) if ((x + 0.5 - wx) ** 2 + (y + 0.5 - wy) ** 2 <= r * r) P1.erase[y * W + x] = add ? 1 : 0;
+  if (!noDraw) P1.draw();
 };
 // file input & drop
 $('#file1').addEventListener('change', e => { const f = e.target.files[0]; if (f) P1.load(f); e.target.value = ''; });

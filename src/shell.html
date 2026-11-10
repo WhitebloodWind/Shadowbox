@@ -71,6 +71,8 @@ aside{border-right:1px solid var(--line);background:var(--panel);overflow:auto;m
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--panel-2);padding:8px 13px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.exp{transition:background-color .15s,color .15s,border-color .15s}
+.btn.exp:hover,.btn.exp:focus-visible{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btns{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 2px}
 .readout{background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:13.5px;margin:12px 0}
@@ -93,6 +95,15 @@ table.bom td.q{text-align:right;font-weight:650}
 .viewtabs .seg{margin:0;background:var(--panel)}
 .explode{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:0 10px;height:34px;font-size:13px}
 .explode input{accent-color:var(--accent);width:110px}
+.viewtabs{flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 200px)}
+.cubebox{position:absolute;right:14px;bottom:46px;width:120px;height:120px}
+#cube{width:120px;height:120px;cursor:pointer;display:block}
+#cubeHome{position:absolute;left:-6px;bottom:-6px;width:26px;height:26px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;font-size:14px;line-height:1;padding:0}
+.navhint{padding-right:130px}
+#photoBox{cursor:pointer;user-select:none}#photoBox input{width:auto;margin:0}
+.navhint{position:absolute;left:14px;bottom:12px;right:14px;font-size:12px;color:var(--muted, #8a9a90);pointer-events:none;line-height:1.5}
+.navhint b{font-weight:600;color:var(--ink, inherit)}
+@media (max-width:700px){.navhint .alt{display:none}}
 .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--mat-ink);padding:24px}
 .empty[hidden]{display:none}
 .empty .card{max-width:420px}
@@ -173,7 +184,11 @@ input[type=file]{display:none}
             <div class="btns"><button class="btn primary" id="traceBtn">Trace outline</button></div>
             <div class="seg" id="toolSeg"><button data-v="edit" aria-pressed="true">Edit points</button><button data-v="pick" aria-pressed="false">Pick object</button><button data-v="erase" aria-pressed="false">Erase</button></div>
             <p class="hint" id="toolHint">Drag a point to move it. Double-click the line to add a point. Select a point and press Delete to remove it.</p>
-            <div class="row" id="brushRow" hidden><label for="brush">Eraser size</label><input type="range" id="brush" min="0.5" max="15" step="0.5" value="3"><span class="val" id="brushV">3 mm</span></div>
+            <div id="brushRow" hidden>
+              <div class="seg" id="eraseSeg"><button data-v="add" aria-pressed="true">Erase</button><button data-v="remove" aria-pressed="false">Restore</button></div>
+              <div class="row"><label for="brush">Brush size</label><input type="range" id="brush" min="0.5" max="15" step="0.5" value="3"><span class="val" id="brushV">3 mm</span></div>
+              <div class="btns"><button class="btn" id="undoErase" disabled>Undo stroke</button><button class="btn" id="redoErase" disabled>Redo</button></div>
+            </div>
             <div class="row"><label for="thr">Threshold</label><input type="range" id="thr" min="0.05" max="0.95" step="0.01" value="0.5"><span class="val" id="thrV">auto</span></div>
             <label class="check"><input type="checkbox" id="thrAuto" checked>Pick the threshold automatically</label>
             <label class="check"><input type="checkbox" id="dark" checked>Object is darker than the background</label>
@@ -183,7 +198,7 @@ input[type=file]{display:none}
             <p class="hint">Raise “Cut off thin attachments” to drop chains, strings or keyrings joined to the object.</p>
             <div class="row"><label for="detail">Point spacing tolerance</label><input type="number" id="detail" value="0.5" min="0.05" step="0.05"><span class="val">mm</span></div>
             <label class="check"><input type="checkbox" id="smooth" checked>Smooth curve through points</label>
-            <div class="btns"><button class="btn" id="delPt" disabled>Delete point</button><button class="btn" id="clearErase">Clear erasing</button></div>
+            <div class="btns"><button class="btn" id="delPt" disabled>Delete point</button><button class="btn" id="clearErase">Clear all erasing</button></div>
             <div class="readout" id="traceInfo" hidden></div>
           </div>
         </section>
@@ -202,10 +217,10 @@ input[type=file]{display:none}
             <p>Choose the lines to include in the file.</p>
             <div id="expLines"></div>
             <div class="btns">
-              <button class="btn" data-exp="svg">SVG</button>
-              <button class="btn" data-exp="dxf">DXF</button>
-              <button class="btn" data-exp="pdf">PDF, 1:1 print</button>
-              <button class="btn" data-exp="json">Points (JSON)</button>
+              <button class="btn exp" data-exp="svg">SVG</button>
+              <button class="btn exp" data-exp="dxf">DXF</button>
+              <button class="btn exp" data-exp="pdf">PDF, 1:1 print</button>
+              <button class="btn exp" data-exp="json">Points (JSON)</button>
             </div>
             <p class="hint">All files are in millimetres. DXF downloads inside a .zip. Print the PDF at 100% and check the 50 mm bar to confirm scale.</p>
             <div class="btns"><button class="btn primary" id="toCase">Build a case from this outline</button></div>
@@ -214,42 +229,35 @@ input[type=file]{display:none}
       </div>
       <!-- PHASE 2 -->
       <div class="phase-panel" id="panel2" hidden>
-        <section class="step open" data-step="1">
-          <button class="head"><span class="num">1</span><span class="title">Choose the outline</span><span class="sub" id="t1sub"></span></button>
+        <section class="step open" data-step="2">
+          <button class="head"><span class="num">1</span><span class="title">Layers and fit</span><span class="sub" id="t2sub"></span></button>
           <div class="body">
-            <div class="seg" id="srcSeg"><button data-v="traced" aria-pressed="true">Traced</button><button data-v="enlarged" aria-pressed="false">Enlarged</button><button data-v="import" aria-pressed="false">Imported</button></div>
-            <div class="row" id="enlPickRow" hidden><label for="enlPick">Enlarged line</label><select id="enlPick"></select></div>
             <p class="hint" id="srcHint"></p>
-            <div class="btns"><label class="btn" for="file2">Import SVG or DXF</label><input type="file" id="file2" accept=".svg,.dxf,image/svg+xml"><button class="btn" id="sample">Use a sample shape</button></div>
-            <div class="row"><label for="impScale">Scale imported file</label><input type="number" id="impScale" value="1" min="0.001" step="0.01"><span class="val">×</span></div>
-            <p class="hint">The case builder treats this line as the edge of your object and adds the gap itself.</p>
-          </div>
-        </section>
-        <section class="step" data-step="2">
-          <button class="head"><span class="num">2</span><span class="title">Layers and fit</span><span class="sub" id="t2sub"></span></button>
-          <div class="body">
             <div class="row"><label for="figT">Object thickness</label><input type="number" id="figT" value="1" min="0.1" step="0.1"><span class="val">mm</span></div>
             <div class="row"><label for="clear">Gap around object</label><input type="number" id="clear" value="1" min="0" step="0.1"><span class="val">mm</span></div>
             <div class="row"><label for="border">Border width</label><input type="number" id="border" value="6.5" min="2" step="0.5"><span class="val">mm</span></div>
-            <div class="row"><label for="plateT">Front and back acrylic</label><select id="plateT"><option>1.5</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select><span class="val">mm</span></div>
-            <div class="row"><label for="spacerT">Spacer acrylic</label><select id="spacerT"><option>1</option><option selected>1.5</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select><span class="val">mm</span></div>
+            <div class="row"><label for="plateT">Front and back acrylic</label><input type="number" id="plateT" value="2" min="0.5" step="0.1"><span class="val">mm</span></div>
+            <div class="row"><label for="spacerT">Spacer acrylic</label><input type="number" id="spacerT" value="1.5" min="0.5" step="0.1"><span class="val">mm</span></div>
             <div class="row"><label for="cornerR">Inside corner radius</label><input type="number" id="cornerR" value="1.5" min="0" step="0.5"><span class="val">mm</span></div>
-            <label class="check"><input type="checkbox" id="keyring" checked>Add a keyring hole</label>
-            <div id="keyRows">
+            <label class="check"><input type="checkbox" id="keyring">Add a keyring hole</label>
+            <div id="keyRows" hidden>
               <div class="row"><label for="keyD">Hole diameter</label><input type="number" id="keyD" value="4" min="1.5" step="0.5"><span class="val">mm</span></div>
-              <div class="row"><label for="keyPos">Position, left to right</label><input type="range" id="keyPos" min="0" max="1" step="0.01" value="0.5"></div>
+              <p class="hint" id="keyHint">Click where you want the hole on the 3D model or the cut layout. It goes on the nearest edge.</p>
+              <div class="btns"><button class="btn" id="keyPlace" aria-pressed="false">Move the hole</button></div>
             </div>
           </div>
         </section>
         <section class="step" data-step="3">
-          <button class="head"><span class="num">3</span><span class="title">Join the layers</span><span class="sub" id="t3sub"></span></button>
+          <button class="head"><span class="num">2</span><span class="title">Join the layers</span><span class="sub" id="t3sub"></span></button>
           <div class="body">
-            <div class="seg" id="joinSeg"><button data-v="screws" aria-pressed="true">Screws</button><button data-v="solvent" aria-pressed="false">Solvent cement</button></div>
-            <div id="screwRows">
+            <div class="seg" id="joinSeg"><button data-v="none" aria-pressed="true">Not yet</button><button data-v="screws" aria-pressed="false">Screws</button><button data-v="solvent" aria-pressed="false">Solvent cement</button></div>
+            <p class="hint" id="noneRows">The case is shown without screws or grooves. Pick a join method when you’re ready.</p>
+            <div id="screwRows" hidden>
               <div class="row"><label for="screw">Screw size</label><select id="screw"><option>M2</option><option>M2.5</option><option>M3</option><option>M4</option></select></div>
-              <div class="row"><label for="spacing">Longest gap between screws</label><input type="number" id="spacing" value="50" min="10" step="1"><span class="val">mm</span></div>
               <div class="row"><label for="minScrews">Fewest screws</label><input type="number" id="minScrews" value="3" min="2" step="1"><span class="val"></span></div>
               <div class="row"><label for="edge">Material beside each hole</label><input type="number" id="edge" value="2" min="0.5" step="0.1"><span class="val">mm</span></div>
+              <label class="check"><input type="checkbox" id="cbore">Counterbore so heads and nuts sit flush</label>
+              <p class="hint" id="cboreHint" hidden>A round pocket is engraved into the front plate for each head and a hex pocket into the back plate for each nut, so both faces are flat. Washers are left out.</p>
             </div>
             <div id="solventRows" hidden>
               <p>A shallow groove engraved around the window on both faces of the spacer stops solvent wicking into the window and clouding it.</p>
@@ -262,15 +270,16 @@ input[type=file]{display:none}
           </div>
         </section>
         <section class="step" data-step="4">
-          <button class="head"><span class="num">4</span><span class="title">Parts and export</span><span class="sub"></span></button>
+          <button class="head"><span class="num">3</span><span class="title">Parts and export</span><span class="sub"></span></button>
           <div class="body">
             <table class="bom" id="bom"></table>
             <div class="btns">
-              <button class="btn primary" data-exp2="laser">Laser files (.zip)</button>
-              <button class="btn" data-exp2="stl">3D parts (.zip)</button>
-              <button class="btn" data-exp2="csv">Parts list (.csv)</button>
+              <button class="btn exp" data-exp2="all">Everything (.zip)</button>
+              <button class="btn exp" data-exp2="laser">Laser files (.zip)</button>
+              <button class="btn exp" data-exp2="stl">3D parts (.zip)</button>
+              <button class="btn exp" data-exp2="csv">Parts list (.csv)</button>
             </div>
-            <p class="hint">Laser files are DXF and SVG in millimetres, with cuts in red and engraving in blue. Both plates are on one sheet.</p>
+            <p class="hint">Everything puts the laser files, 3D parts and parts list in one zip, each in its own folder. Laser files are DXF and SVG in millimetres, with cuts in red and engraving in blue. Both plates are on one sheet.</p>
           </div>
         </section>
       </div>
@@ -281,13 +290,16 @@ input[type=file]{display:none}
       <canvas id="cv3" hidden aria-label="3D model"></canvas>
       <div class="hud" id="hud"></div>
       <div class="viewtabs" id="viewtabs" hidden>
+        <label class="explode" id="photoBox" hidden><input type="checkbox" id="showPhoto" checked>Silhouette</label>
         <div class="explode" id="explodeBox"><label for="explode">Explode</label><input type="range" id="explode" min="0" max="1" step="0.01" value="0.35"></div>
         <div class="seg" id="viewSeg"><button data-v="3d" aria-pressed="true">3D model</button><button data-v="layout" aria-pressed="false">Cut layout</button></div>
       </div>
+      <div class="cubebox" id="cubeBox" hidden><canvas id="cube" title="Click a face, edge or corner to look from there. Drag to orbit. Arrows step to the next face or turn the view." aria-label="View cube"></canvas><button id="cubeHome" title="Home view" aria-label="Home view">⌂</button></div>
+      <div class="navhint" id="navHint" hidden><b>Middle drag</b> pan · <b>Shift + middle drag</b> orbit · <b>Scroll</b> or <b>pinch</b> zoom at cursor · <b>Two-finger drag</b> pan · <b>Double-click middle</b> fit<span class="alt"> · Left drag also orbits, right drag also pans</span></div>
       <div class="legend" id="legend" hidden><span><i style="color:var(--cut)"></i>Cut</span><span id="legEng"><i style="color:var(--engrave)"></i>Engrave</span><span id="legScrew"><i style="color:var(--mat-ink);border-top-style:dashed"></i>Screw line</span></div>
       <div class="tools" id="tools"><button id="zoomOut" aria-label="Zoom out">−</button><button id="zoomFit" aria-label="Fit to view">Fit</button><button id="zoomIn" aria-label="Zoom in">+</button></div>
       <div class="empty" id="empty1"><div class="card"><h2>Trace any flat object into a cut-ready outline</h2><p>Upload a photo with a ruler or grid paper in the shot. Everything runs in your browser.</p><label class="btn" for="file1">Choose photo</label></div></div>
-      <div class="empty" id="empty2" hidden><div class="card"><h2>No outline yet</h2><p>Trace one in the Outline tab, import an SVG or DXF, or try a sample shape.</p><button class="btn" id="sample2">Use a sample shape</button></div></div>
+      <div class="empty" id="empty2" hidden><div class="card"><h2>No outline yet</h2><p>The case is built from the traced outline. Set the scale and trace your object in the Outline tab first.</p><button class="btn" id="toOutline">Go to Outline</button></div></div>
       <div class="busy" id="busy" hidden>Working…</div>
     </div>
   </div>
