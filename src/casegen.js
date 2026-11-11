@@ -122,10 +122,22 @@ const CaseGen = (() => {
       best = { N, idx, gaps, maxGap, ok: bestPhase.ok, surrounds };
       if (bestPhase.ok && maxGap <= S * 1.05 && surrounds) break;
     }
+    // The case uses the user's own screw list (p.screwList, mm). The automatic plan above is only kept when
+    // no list is given, which is how planScrews() asks for a suggestion to preview.
+    const list = p.screwList;
+    if (list) {
+      const nearest = (x, y) => { let bi = 0, bd = Infinity; path.forEach(([px, py], i) => { const d = (px - x) ** 2 + (py - y) ** 2; if (d < bd) { bd = d; bi = i; } }); return bi; };
+      const idx = [...new Set(list.map(([x, y]) => nearest(x, y)))].sort((a, b) => a - b);
+      const gaps = idx.map((v, k) => (((idx[(k + 1) % idx.length] - v) + n) % n || n) * 0.5);
+      best = { idx, gaps, maxGap: gaps.length ? Math.max(...gaps) : 0, ok: true };
+      if (idx.length && !(idx.length >= 3 && inside(idx.map(q => path[q]), mid[0], mid[1]))) warnings.push('The screws don’t surround the middle of the case, so the plates can rock. Add a screw on the far side.');
+      const cramped = idx.filter(q => !valid[q]).length;
+      if (cramped) warnings.push(`${cramped} of the screws ${cramped === 1 ? 'has' : 'have'} less than ${m} mm of acrylic beside the hole. Move ${cramped === 1 ? 'it' : 'them'} or widen the border.`);
+    }
     const screws = best.idx.map((q, k) => ({ x: path[q][0], y: path[q][1], n: k + 1, clearance: clearance[q] }));
     const minClear = screws.length ? Math.min(...screws.map(s => s.clearance)) : 0;
     if (validFrac < 0.6) warnings.push(`The border is too narrow for ${p.screw} holes along much of the outline. A border of about ${(2 * (hr + m) + 1).toFixed(1)} mm leaves room everywhere.`);
-    if (best.maxGap > S * 1.05) warnings.push(`One gap between screws is ${best.maxGap.toFixed(0)} mm, longer than the ${S.toFixed(0)} mm the plates can span, because the border is too narrow there. Widen the border or use thicker acrylic.`);
+    if (best.maxGap > S * 1.05) warnings.push(`One gap between screws is ${best.maxGap.toFixed(0)} mm, longer than the ${S.toFixed(0)} mm the plates can span` + (list ? '. Add a screw in that gap.' : ', because the border is too narrow there. Widen the border or use thicker acrylic.'));
     if (!best.ok) warnings.push('Some screws could not be placed. Widen the border or use a smaller screw.');
     const stack = 2 * p.plateT + p.spacerT;
     const need = stack + spec.washer + spec.nut + 0.5;
@@ -180,6 +192,11 @@ const CaseGen = (() => {
     return best;
   }
 
+  // The automatic screw plan for a built case, ignoring the user's list: used for the Generate preview.
+  function planScrews(cs, p) {
+    const h = cs.holes.find(q => q.kind === 'keyring');
+    return placeScrews(cs.g, cs.fields.cavS, cs.fields.outerS, h ? { x: h.x, y: h.y, d: h.d } : null, { ...p, screwList: null });
+  }
   function ringAt(cs, x, y, d) {
     const at = edgePoint(cs.lines.cavity, edgeParam(cs.lines.cavity, x, y), cs.fields.cavS, cs.g); if (!at) return null;
     const off = d / 2 + RING_GAP; return { x: at.x + at.nx * off, y: at.y + at.ny * off, d, tab: d / 2 + RING_TAB };
@@ -235,6 +252,6 @@ const CaseGen = (() => {
     }
     return out;
   }
-  return { build, meshes, edgeParam, ringAt, spanLimit, SPAN, SCREWS };
+  return { build, meshes, edgeParam, ringAt, planScrews, spanLimit, SPAN, SCREWS };
 })();
 if (typeof module !== 'undefined') module.exports = CaseGen;

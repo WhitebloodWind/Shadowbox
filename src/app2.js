@@ -391,19 +391,20 @@ const Cube = (() => {
   $('#cubeHome').addEventListener('click', () => snap([Math.cos(-1.05) * Math.cos(0.75), Math.sin(-1.05) * Math.cos(0.75), Math.sin(0.75)]));
   return { draw, snap, hit, arrow, aligned };
 })();
-{ const baseRender = viewer.render.bind(viewer); viewer.render = () => { baseRender(); Cube.draw(); }; }
-viewer.onClick = (x, y) => { if (!P2.placing) return false; P2.placeKeyring(x, y); return true; };
+{ const baseRender = viewer.render.bind(viewer); viewer.render = () => { baseRender(); Cube.draw(); if (P2.drawOverlay) P2.drawOverlay(); }; }
+viewer.onClick = (x, y) => P2.caseClick(x, y);
 viewer.clickZ = () => P2.p ? P2.p.plateT + P2.p.spacerT + (viewer.ex || 0) : 0;
 const viewSeg = seg('#viewSeg', v => { P2.view = v; P2.show(); });
 $('#explode').addEventListener('input', () => { viewer.explode = +$('#explode').value; viewer.render(); });
 $('#showPhoto').addEventListener('change', () => { viewer.showPhoto = $('#showPhoto').checked; viewer.render(); });
 $('#showScrews').addEventListener('change', () => { viewer.showScrews = $('#showScrews').checked; viewer.render(); });
-const joinSeg = seg('#joinSeg', v => { $('#noneRows').hidden = v !== 'none'; $('#screwRows').hidden = v !== 'screws'; $('#solventRows').hidden = v !== 'solvent'; P2.recompute(); });
+const joinSeg = seg('#joinSeg', v => { P2.setScrewMode(null); P2.setScrewPreview(null); $('#noneRows').hidden = v !== 'none'; $('#screwRows').hidden = v !== 'screws'; $('#solventRows').hidden = v !== 'solvent'; P2.recompute(); });
 P2.keyPos = null; // where the keyring hole sits, as a fraction round the window edge; null until the user places it
 $('#keyring').addEventListener('change', () => { const on = $('#keyring').checked; $('#keyRows').hidden = !on; P2.setPlacing(on && P2.keyPos === null); P2.recompute(); });
 // Keyring placement: click the button, then click the case in either view.
 P2.placing = false;
 P2.setPlacing = function (on) {
+  if (on && P2.screwMode) P2.setScrewMode(null);
   P2.placing = on; $('#keyPlace').setAttribute('aria-pressed', String(on)); $('#keyPlace').textContent = on ? 'Cancel' : P2.keyPos === null ? 'Place the hole' : 'Move the hole';
   $('#keyHint').textContent = on ? 'Click where you want the hole on the 3D model or the cut layout. It goes on the nearest edge. Esc cancels.' : P2.keyPos === null ? 'The hole isn’t placed yet.' : 'The hole is placed. Click Move the hole to put it somewhere else.';
   $('#cv2').style.cursor = $('#cv3').style.cursor = on ? 'crosshair' : '';
@@ -411,17 +412,27 @@ P2.setPlacing = function (on) {
 };
 $('#keyPlace').addEventListener('click', () => P2.setPlacing(!P2.placing));
 // Hover preview while placing: the hole and the tab of acrylic round it, where a click would put them.
-P2.drawKeyPreview = function (mm) {
+P2.drawKeyPreview = function (mm) { P2.keyHover = mm; P2.drawOverlay(); };
+// Overlay drawn over either view: the suggested screws while previewing, and the keyring hole under the cursor while placing.
+P2.drawOverlay = function () {
   const ov = $('#keyPreview'), r = ov.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
   ov.width = Math.max(1, Math.round(r.width * dpr)); ov.height = Math.max(1, Math.round(r.height * dpr));
   const c = ov.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, r.width, r.height);
-  if (!mm || !P2.placing || !P2.cs) return;
-  const ring = CaseGen.ringAt(P2.cs, mm[0], mm[1], Math.max(1.5, num('#keyD'))); if (!ring) return;
+  if (phase !== 2 || !P2.cs) return;
   const off = (P2.view === '3d' ? $('#cv3') : $('#cv2')).getBoundingClientRect(); const ox = off.left - r.left, oy = off.top - r.top;
   const toScr = P2.view === '3d'
     ? (x, y) => { const q = viewer.project([x, -y, viewer.clickZ()]); return q && [q[0] + ox, q[1] + oy]; }
     : (x, y) => [x * P2.lv.s + P2.lv.tx + ox, y * P2.lv.s + P2.lv.ty + oy];
+  const ring0 = { x: 0, y: 0 }; let ring = ring0;
   const circle = rad => { const pts = []; for (let k = 0; k <= 48; k++) { const a = k / 48 * 2 * Math.PI, q = toScr(ring.x + rad * Math.cos(a), ring.y + rad * Math.sin(a)); if (!q) return false; pts.push(q); } c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); return true; };
+  if (P2.screwPreview) for (const s of P2.screwPreview.screws) { // dashed head outline + hole, numbered
+    ring = s; const sp = P2.screwPreview.spec;
+    if (circle(sp.head / 2 + 0.6)) { c.setLineDash([4, 3]); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke(); c.setLineDash([]); }
+    if (circle(sp.hole / 2)) { c.fillStyle = 'rgba(80,210,230,0.55)'; c.fill(); }
+    const at = toScr(s.x + sp.head / 2 + 1, s.y - sp.head / 2 - 1); if (at) { c.font = '700 11px Archivo, sans-serif'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.fillStyle = '#fff'; c.strokeText(String(s.n), at[0], at[1]); c.fillText(String(s.n), at[0], at[1]); }
+  }
+  const mm = P2.keyHover; if (!mm || !P2.placing) return;
+  ring = CaseGen.ringAt(P2.cs, mm[0], mm[1], Math.max(1.5, num('#keyD'))); if (!ring) return;
   if (circle(ring.tab)) { c.setLineDash([5, 4]); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke(); c.setLineDash([]); }
   if (circle(ring.d / 2)) { c.fillStyle = 'rgba(80,210,230,0.30)'; c.fill(); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#6FE3F2'; c.stroke(); }
   const at = toScr(ring.x + ring.tab, ring.y - ring.tab); if (!at) return;
@@ -431,7 +442,40 @@ P2.drawKeyPreview = function (mm) {
 $('#cv3').addEventListener('pointermove', e => { if (!P2.placing || e.buttons) return; const h = viewer.pickPlane(e.clientX, e.clientY, viewer.clickZ()); P2.drawKeyPreview(h && [h[0], -h[1]]); });
 $('#cv2').addEventListener('pointermove', e => { if (!P2.placing || e.buttons) return; const r = cv2.getBoundingClientRect(); P2.drawKeyPreview([(e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s]); });
 ['#cv2', '#cv3'].forEach(id => $(id).addEventListener('pointerleave', () => P2.drawKeyPreview(null)));
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && P2.placing) P2.setPlacing(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && P2.placing) P2.setPlacing(false); if (e.key === 'Escape' && P2.screwMode) P2.setScrewMode(null); });
+// Screws: the case uses P2.screwList (case mm, snapped onto the screw line when built). Generate shows a
+// suggested set as a preview to accept or discard; Add and Remove edit the list at any time.
+P2.screwList = []; P2.screwMode = null; P2.screwPreview = null;
+P2.screwHintText = () => P2.screwMode === 'add' ? 'Click the border where the new screw should go. Esc cancels.' : P2.screwMode === 'remove' ? 'Click the screw to remove. Esc cancels.'
+  : P2.screwList.length ? `${P2.screwList.length} screw${P2.screwList.length === 1 ? '' : 's'} placed. Add or remove screws at any time, or generate a new set.` : 'No screws yet. Generate a suggested set, or add your own by clicking the case.';
+P2.setScrewMode = function (mode) {
+  P2.screwMode = mode; if (mode && P2.placing) P2.setPlacing(false);
+  $('#screwAdd').setAttribute('aria-pressed', String(mode === 'add')); $('#screwDel').setAttribute('aria-pressed', String(mode === 'remove'));
+  $('#screwHint').textContent = P2.screwHintText();
+  $('#cv2').style.cursor = $('#cv3').style.cursor = mode || P2.placing ? 'crosshair' : '';
+};
+P2.setScrewPreview = function (plan) {
+  P2.screwPreview = plan; $('#screwPrev').hidden = !plan;
+  if (plan) $('#screwPrevHint').textContent = `Preview: ${plan.screws.length} screws, the fewest that keep every gap under ${fmt(plan.span, 0)} mm and surround the middle.` + (plan.warnings.length ? ' ' + plan.warnings.join(' ') : '');
+  P2.drawOverlay();
+};
+$('#screwAdd').addEventListener('click', () => P2.setScrewMode(P2.screwMode === 'add' ? null : 'add'));
+$('#screwDel').addEventListener('click', () => P2.setScrewMode(P2.screwMode === 'remove' ? null : 'remove'));
+$('#screwGen').addEventListener('click', () => { if (P2.cs) { P2.setScrewMode(null); P2.setScrewPreview(CaseGen.planScrews(P2.cs, P2.p)); } });
+$('#screwAccept').addEventListener('click', () => { const pl = P2.screwPreview; if (!pl) return; P2.screwList = pl.screws.map(s => [s.x, s.y]); P2.setScrewPreview(null); P2.setScrewMode(null); P2.recompute(); });
+$('#screwDiscard').addEventListener('click', () => P2.setScrewPreview(null));
+P2.caseClick = function (x, y) { // a click on the case in either view; true if it was used
+  if (P2.placing) { P2.placeKeyring(x, y); return true; }
+  if (!P2.screwMode) return false;
+  if (P2.screwMode === 'add') P2.screwList.push([x, y]);
+  else { // remove the placed screw nearest the click, within 6 mm
+    const scr = (P2.cs && P2.cs.analysis) ? P2.cs.analysis.screws : []; let s = null, bd = 6;
+    for (const q of scr) { const d = Math.hypot(q.x - x, q.y - y); if (d < bd) { bd = d; s = q; } }
+    if (!s) { toast('Click closer to a screw.'); return true; }
+    P2.screwList = scr.filter(q => q !== s).map(q => [q.x, q.y]);
+  }
+  P2.setScrewMode(null); P2.recompute(); return true;
+};
 P2.placeKeyring = function (x, y) { // x, y in case mm, y down
   if (!P2.cs || !P2.cs.lines.cavity) return;
   P2.keyPos = CaseGen.edgeParam(P2.cs.lines.cavity, x, y); P2.setPlacing(false); P2.recompute();
@@ -449,7 +493,7 @@ P2.getFig = function () {
 P2.params = () => ({
   figT: num('#figT'), clear: Math.max(0, num('#clear')), border: Math.max(2, num('#border')), plateT: Math.max(0.5, num('#plateT')), spacerT: Math.max(0.5, num('#spacerT')), cornerR: Math.max(0, num('#cornerR')),
   keyring: $('#keyring').checked && P2.keyPos !== null, keyringD: Math.max(1.5, num('#keyD')), keyringPos: P2.keyPos || 0,
-  join: joinSeg.value, screw: $('#screw').value, counterbore: $('#cbore').checked, minScrews: Math.max(2, Math.round(num('#minScrews'))), edge: Math.max(0.5, num('#edge')),
+  join: joinSeg.value, screwList: P2.screwList, screw: $('#screw').value, counterbore: $('#cbore').checked, minScrews: Math.max(2, Math.round(num('#minScrews'))), edge: Math.max(0.5, num('#edge')),
   grooveOffset: Math.max(0.3, num('#gOff')), grooveWidth: Math.max(0.2, num('#gW')), grooveDepth: Math.max(0.1, num('#gD')),
 });
 P2.enter = function () {
@@ -512,9 +556,10 @@ P2.updatePhoto = function (p) {
 P2.updateAnalysis = function () {
   const cs = P2.cs, p = P2.p, box = $('#analysis'); box.hidden = !cs.analysis && !cs.grooves;
   if (!cs.analysis && !cs.grooves) { box.innerHTML = ''; $('#t3sub').textContent = 'Not yet'; }
+  else if (cs.analysis && !cs.analysis.screws.length) { box.hidden = true; box.innerHTML = ''; $('#t3sub').textContent = 'No screws yet'; }
   else if (cs.analysis) {
     const a = cs.analysis;
-    box.innerHTML = `<dl><dt>Screws needed</dt><dd>${a.screws.length} × ${p.screw} × ${a.length} mm</dd><dt>Screw line around the window</dt><dd>${fmt(a.pathLength, 0)} mm</dd><dt>Longest gap between screws</dt><dd>${fmt(a.maxGap)} mm (allowed ${fmt(a.span, 0)} mm)</dd><dt>Thinnest material beside a hole</dt><dd>${fmt(a.minClear)} mm</dd><dt>Stack thickness</dt><dd>${fmt(a.stack)} mm</dd>${a.cb ? `<dt>Head pockets</dt><dd>⌀${fmt(a.cb.headD)} × ${fmt(a.cb.headDepth)} mm deep</dd><dt>Nut pockets</dt><dd>${fmt(2 * a.cb.nutR)} mm hex × ${fmt(a.cb.nutDepth)} mm deep</dd>` : ''}</dl><p class="hint" style="margin:8px 0 0">${a.screws.length} is the fewest that works. Each stretch of ${fmt(p.plateT)} mm plate between screws is treated as a beam clamped at both ends; with a ${fmt(p.border)} mm border it can span ${fmt(a.span, 0)} mm before a firm press opens the edge more than ${CaseGen.SPAN.delta} mm. The screws also surround the middle of the case so it can’t rock, and each hole has at least ${p.edge} mm of acrylic beside it.</p>`;
+    box.innerHTML = `<dl><dt>Screws needed</dt><dd>${a.screws.length} × ${p.screw} × ${a.length} mm</dd><dt>Screw line around the window</dt><dd>${fmt(a.pathLength, 0)} mm</dd><dt>Longest gap between screws</dt><dd>${fmt(a.maxGap)} mm (allowed ${fmt(a.span, 0)} mm)</dd><dt>Thinnest material beside a hole</dt><dd>${fmt(a.minClear)} mm</dd><dt>Stack thickness</dt><dd>${fmt(a.stack)} mm</dd>${a.cb ? `<dt>Head pockets</dt><dd>⌀${fmt(a.cb.headD)} × ${fmt(a.cb.headDepth)} mm deep</dd><dt>Nut pockets</dt><dd>${fmt(2 * a.cb.nutR)} mm hex × ${fmt(a.cb.nutDepth)} mm deep</dd>` : ''}</dl><p class="hint" style="margin:8px 0 0">${a.screws.length} screw${a.screws.length === 1 ? '' : 's'} placed. Each stretch of ${fmt(p.plateT)} mm plate between screws is treated as a beam clamped at both ends; with a ${fmt(p.border)} mm border it can span ${fmt(a.span, 0)} mm before a firm press opens the edge more than ${CaseGen.SPAN.delta} mm. The screws also surround the middle of the case so it can’t rock, and each hole has at least ${p.edge} mm of acrylic beside it.</p>`;
     $('#t3sub').textContent = `${a.screws.length} × ${p.screw}`;
   } else {
     box.innerHTML = `<dl><dt>Groove</dt><dd>${fmt(p.grooveWidth)} mm wide, ${fmt(p.grooveDepth, 2)} mm deep</dd><dt>Distance from window</dt><dd>${fmt(p.grooveOffset)} mm</dd></dl><p class="hint" style="margin:8px 0 0">Engrave the groove, flip the spacer and engrave the other face too. Apply solvent from the outer edge and let it wick in up to the groove.</p>`;
@@ -529,7 +574,7 @@ P2.bomRows = function () {
     ['Back plate', `Clear cast acrylic, ${p.plateT} mm`, 1, size],
     ['Spacer', `Acrylic, ${p.spacerT} mm`, 1, size],
   ];
-  if (cs.analysis) {
+  if (cs.analysis && cs.analysis.screws.length) {
     const a = cs.analysis, n = a.screws.length;
     if (a.cb) rows.push([`Screw`, `${p.screw} × ${a.length} mm pan head`, n, a.cb.trim ? `Cut to ${a.cb.trim} mm so the end sits flush` : 'Head sits flush in its pocket'], ['Nut', `${p.screw} hex nut`, n, 'Sits flush in its hex pocket']);
     else rows.push([`Screw`, `${p.screw} × ${a.length} mm pan head`, n, `${a.spec.hole} mm holes`], ['Nut', `${p.screw} hex nut`, n, ''], ['Washer', `${p.screw} nylon washer`, 2 * n, 'Under the head and the nut']);
@@ -566,6 +611,7 @@ P2.drawLayout = function () {
     if (h.kind === 'screw') { c.fillStyle = ink; c.font = `600 ${11 * dpr}px Archivo, sans-serif`; c.fillText(String(h.n), X + (h.d / 2 * P2.lv.s + 4) * dpr, Y - 4 * dpr); }
   }
   if (cs.analysis && cs.analysis.cb) for (const s of cs.analysis.screws) { const [X, Y] = T(s.x, s.y); c.beginPath(); c.arc(X, Y, cs.analysis.cb.headD / 2 * P2.lv.s * dpr, 0, Math.PI * 2); c.strokeStyle = eng; c.lineWidth = 1.5 * dpr; c.stroke(); }
+  P2.drawOverlay();
   $('#legEng').hidden = !cs.grooves && !(cs.analysis && cs.analysis.cb); $('#legScrew').hidden = !cs.analysis;
 };
 (() => {
@@ -573,7 +619,7 @@ P2.drawLayout = function () {
   cv2.addEventListener('pointerdown', e => { try { cv2.setPointerCapture(e.pointerId); } catch (_) {} pts.set(e.pointerId, [e.clientX, e.clientY]); st = { x: e.clientX, y: e.clientY, v: { ...P2.lv } }; });
   cv2.addEventListener('pointermove', e => { if (!pts.has(e.pointerId) || !st) return; P2.lv = { ...st.v, tx: st.v.tx + e.clientX - st.x, ty: st.v.ty + e.clientY - st.y }; P2.drawLayout(); });
   const up = e => {
-    if (st && P2.placing && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 5) { const r = cv2.getBoundingClientRect(); P2.placeKeyring((e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s); }
+    if (st && (P2.placing || P2.screwMode) && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 5) { const r = cv2.getBoundingClientRect(); P2.caseClick((e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s); }
     pts.delete(e.pointerId); st = null;
   };
   cv2.addEventListener('pointerup', up); cv2.addEventListener('pointercancel', up);
@@ -606,7 +652,7 @@ P2.export = function (kind) {
       `${pn}: cut once from ${p.plateT} mm clear acrylic. This sheet holds both plates.` + (cb ? ` Left = front plate, right = back plate (drawn mirrored). Raster-engrave the blue pockets first: round head pockets ${fmt(cb.headDepth)} mm deep on the front plate, hex nut pockets ${fmt(cb.nutDepth)} mm deep on the back plate. Test the depth on scrap. Then cut. Flip the back plate over so its pockets face out.` : ''),
       `${sn}: cut from ${p.spacerT} mm acrylic.` + (cs.grooves ? ` Engrave the blue groove first, ${p.grooveDepth} mm deep, then flip the spacer and engrave the other face. Cut last.` : ''),
       ``, `Cut holes and inner shapes before outer outlines so parts don't shift.`, `Kerf (about 0.1-0.2 mm) makes holes slightly larger and outlines slightly smaller. That only adds clearance.`,
-      cs.analysis ? (cb ? `Hardware: ${cs.analysis.screws.length} x ${p.screw} x ${cs.analysis.length} mm screws${cb.trim ? ` cut to ${cb.trim} mm` : ''} and nuts. No washers: heads and nuts sit in their pockets.` : `Hardware: ${cs.analysis.screws.length} x ${p.screw} x ${cs.analysis.length} mm screws, nuts and ${2 * cs.analysis.screws.length} washers.`) : cs.grooves ? `Join with acrylic solvent cement applied from the outer edge.` : `No join method chosen yet.`].join('\n');
+      cs.analysis && cs.analysis.screws.length ? (cb ? `Hardware: ${cs.analysis.screws.length} x ${p.screw} x ${cs.analysis.length} mm screws${cb.trim ? ` cut to ${cb.trim} mm` : ''} and nuts. No washers: heads and nuts sit in their pockets.` : `Hardware: ${cs.analysis.screws.length} x ${p.screw} x ${cs.analysis.length} mm screws, nuts and ${2 * cs.analysis.screws.length} washers.`) : cs.grooves ? `Join with acrylic solvent cement applied from the outer edge.` : `No join method chosen yet.`].join('\n');
     return [
       { name: pn + '.dxf', data: toDXF(plates) }, { name: pn + '.svg', data: toSVG(plates) },
       { name: sn + '.dxf', data: toDXF(spacer) }, { name: sn + '.svg', data: toSVG(spacer) },

@@ -177,7 +177,7 @@ input[type=file]{display:none}
               <div class="row"><label for="calW">Rectangle width</label><input type="number" id="calW" value="100" min="1" step="0.1"><span class="val">mm</span></div>
               <div class="row"><label for="calH">Rectangle height</label><input type="number" id="calH" value="100" min="1" step="0.1"><span class="val">mm</span></div>
             </div>
-            <div class="btns"><button class="btn primary" id="calApply" disabled>Apply scale</button><button class="btn" id="calClear">Clear points</button><button class="btn" id="calReset" hidden>Use original photo</button></div>
+            <div class="btns"><button class="btn primary" id="calApply" disabled>Apply scale</button><button class="btn" id="calClear">Clear points</button><button class="btn" id="calEdit" hidden>Edit corners</button><button class="btn" id="calReset" hidden>Use original photo</button></div>
             <p class="hint">Use the longest distance you can for the most accurate scale.</p>
           </div>
         </section>
@@ -259,6 +259,9 @@ input[type=file]{display:none}
               <div class="row"><label for="screw">Screw size</label><select id="screw"><option>M2</option><option>M2.5</option><option>M3</option><option>M4</option></select></div>
               <div class="row"><label for="minScrews">Fewest screws</label><input type="number" id="minScrews" value="3" min="2" step="1"><span class="val"></span></div>
               <div class="row"><label for="edge">Material beside each hole</label><input type="number" id="edge" value="2" min="0.5" step="0.1"><span class="val">mm</span></div>
+              <div class="btns"><button class="btn" id="screwGen">Generate screws</button><button class="btn" id="screwAdd" aria-pressed="false">Add a screw</button><button class="btn" id="screwDel" aria-pressed="false">Remove a screw</button></div>
+              <div id="screwPrev" hidden><p class="hint" id="screwPrevHint"></p><div class="btns"><button class="btn primary" id="screwAccept">Accept</button><button class="btn" id="screwDiscard">Discard</button></div></div>
+              <p class="hint" id="screwHint">No screws yet. Generate a suggested set, or add your own by clicking the case.</p>
               <label class="check"><input type="checkbox" id="cbore">Counterbore so heads and nuts sit flush</label>
               <p class="hint" id="cboreHint" hidden>A round pocket is engraved into the front plate for each head and a hex pocket into the back plate for each nut, so both faces are flat. Washers are left out.</p>
             </div>

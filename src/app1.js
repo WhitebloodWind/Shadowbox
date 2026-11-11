@@ -150,7 +150,7 @@ function setPhase(p) {
   $('#cv1').hidden = p !== 1; $('#tools').hidden = p === 1 && !P1.img;
   $('#empty1').hidden = !(p === 1 && !P1.img);
   $('#viewtabs').hidden = p !== 2;
-  if (p === 2) P2.enter(); else { $('#cubeBox').hidden = true; $('#cv2').hidden = true; $('#cv3').hidden = true; $('#empty2').hidden = true; $('#legend').hidden = true; P1.resize(); }
+  if (p === 2) P2.enter(); else { if (P2.drawOverlay) P2.drawOverlay(); $('#cubeBox').hidden = true; $('#cv2').hidden = true; $('#cv3').hidden = true; $('#empty2').hidden = true; $('#legend').hidden = true; P1.resize(); }
   updateHud();
 }
 $('#tab1').addEventListener('click', () => setPhase(1));
@@ -226,8 +226,16 @@ P1.calNeed = () => P1.cal.mode === '2' ? 2 : 4;
 P1.calCheck = () => { $('#calApply').disabled = P1.cal.pts.length !== P1.calNeed(); };
 $('#calClear').addEventListener('click', () => { P1.cal.pts = []; P1.calCheck(); P1.draw(); });
 $('#calReset').addEventListener('click', () => {
-  P1.setWork(P1.src); P1.mmPerPx = null; P1.rectified = false; $('#calReset').hidden = true; P1.cal.pts = []; P1.resetTrace();
+  P1.setWork(P1.src); P1.mmPerPx = null; P1.rectified = false; $('#calReset').hidden = $('#calEdit').hidden = true; P1.cal.pts = []; P1.resetTrace();
   $('#s2sub').textContent = 'Not set'; markDone('#panel1', 2, false); P1.calCheck(); P1.fit(); updateHud();
+});
+// Back to the original photo with the last four corners in place, ready to drag and apply again.
+$('#calEdit').addEventListener('click', () => {
+  const r = P1.lastRect; if (!r) return;
+  P1.setWork(P1.src); P1.mmPerPx = null; P1.rectified = false; $('#calReset').hidden = $('#calEdit').hidden = true; P1.resetTrace();
+  calMode.set('4', true); P1.cal.pts = r.pts.map(p => p.slice()); $('#calW').value = r.w; $('#calH').value = r.h;
+  $('#s2sub').textContent = 'Editing corners'; markDone('#panel1', 2, false); P1.calCheck(); P1.fit(); updateHud();
+  toast('Drag the corners, then apply the scale again.');
 });
 $('#calApply').addEventListener('click', () => {
   const pts = P1.cal.pts;
@@ -276,7 +284,11 @@ P1.rectify = function (pts, wmm, hmm) {
     od.data[o4 + 3] = 255;
   }
   oc.putImageData(od, 0, 0);
-  P1.setWork(out); P1.mmPerPx = 1 / res; P1.rectified = true; P1.cal.pts = []; P1.resetTrace(); $('#calReset').hidden = false; P1.fit();
+  // Kept so the corners can be edited later, but only when they were clicked on the original photo,
+  // since Edit corners puts them back on that photo.
+  const fromSrc = P1.work === P1.src;
+  P1.lastRect = fromSrc ? { pts: o.map(p => p.slice()), w: wmm, h: hmm } : null;
+  P1.setWork(out); P1.mmPerPx = 1 / res; P1.rectified = true; P1.cal.pts = []; P1.resetTrace(); $('#calReset').hidden = false; $('#calEdit').hidden = !fromSrc; P1.fit();
 };
 
 // ---- tracing ----
