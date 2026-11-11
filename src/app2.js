@@ -393,12 +393,20 @@ const Cube = (() => {
 })();
 { const baseRender = viewer.render.bind(viewer); viewer.render = () => { baseRender(); Cube.draw(); if (P2.drawOverlay) P2.drawOverlay(); }; }
 viewer.onClick = (x, y) => P2.caseClick(x, y);
-viewer.clickZ = () => P2.p ? P2.p.plateT + P2.p.spacerT + (viewer.ex || 0) : 0;
+viewer.clickZ = () => !P2.cs ? 0 : P2.cs.dims ? P2.cs.dims.H + 2 * (viewer.ex || 0) : P2.p.plateT + P2.p.spacerT + (viewer.ex || 0); // top face of the case's front part
 const viewSeg = seg('#viewSeg', v => { P2.view = v; P2.show(); });
 $('#explode').addEventListener('input', () => { viewer.explode = +$('#explode').value; viewer.render(); });
 $('#showPhoto').addEventListener('change', () => { viewer.showPhoto = $('#showPhoto').checked; viewer.render(); });
 $('#showScrews').addEventListener('change', () => { viewer.showScrews = $('#showScrews').checked; viewer.render(); });
 const joinSeg = seg('#joinSeg', v => { P2.setScrewMode(null); P2.setScrewPreview(null); $('#noneRows').hidden = v !== 'none'; $('#screwRows').hidden = v !== 'screws'; $('#solventRows').hidden = v !== 'solvent'; P2.recompute(); });
+// Case style: the acrylic stack (CaseGen) or the snap-fit printed frame (SnapGen). Rows marked data-style show for one style only.
+P2.style = 'acrylic'; const Gen = () => P2.style === 'snap' ? SnapGen : CaseGen;
+const styleSeg = seg('#styleSeg', v => {
+  P2.style = v; P2.setScrewMode(null); P2.setScrewPreview(null);
+  $$('[data-style]').forEach(el => { el.hidden = el.dataset.style !== v; });
+  $('#t3title').textContent = v === 'snap' ? 'Snap clips' : 'Join the layers';
+  P2.cs = null; P2.recompute();
+});
 P2.keyPos = null; // where the keyring hole sits, as a fraction round the window edge; null until the user places it
 $('#keyring').addEventListener('change', () => { const on = $('#keyring').checked; $('#keyRows').hidden = !on; P2.setPlacing(on && P2.keyPos === null); P2.recompute(); });
 // Keyring placement: click the button, then click the case in either view.
@@ -432,7 +440,7 @@ P2.drawOverlay = function () {
     const at = toScr(s.x + sp.head / 2 + 1, s.y - sp.head / 2 - 1); if (at) { c.font = '700 11px Archivo, sans-serif'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.fillStyle = '#fff'; c.strokeText(String(s.n), at[0], at[1]); c.fillText(String(s.n), at[0], at[1]); }
   }
   const mm = P2.keyHover; if (!mm || !P2.placing) return;
-  ring = CaseGen.ringAt(P2.cs, mm[0], mm[1], Math.max(1.5, num('#keyD'))); if (!ring) return;
+  ring = Gen().ringAt(P2.cs, mm[0], mm[1], Math.max(1.5, num('#keyD'))); if (!ring) return;
   if (circle(ring.tab)) { c.setLineDash([5, 4]); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke(); c.setLineDash([]); }
   if (circle(ring.d / 2)) { c.fillStyle = 'rgba(80,210,230,0.30)'; c.fill(); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#6FE3F2'; c.stroke(); }
   const at = toScr(ring.x + ring.tab, ring.y - ring.tab); if (!at) return;
@@ -478,10 +486,10 @@ P2.caseClick = function (x, y) { // a click on the case in either view; true if 
 };
 P2.placeKeyring = function (x, y) { // x, y in case mm, y down
   if (!P2.cs || !P2.cs.lines.cavity) return;
-  P2.keyPos = CaseGen.edgeParam(P2.cs.lines.cavity, x, y); P2.setPlacing(false); P2.recompute();
+  P2.keyPos = Gen().edgeParam(P2.cs.lines.cavity, x, y); P2.setPlacing(false); P2.recompute();
 };
 const recomputeDeb = debounce(() => P2.recompute(), 400);
-['#figT', '#clear', '#border', '#plateT', '#spacerT', '#cornerR', '#keyD', '#minScrews', '#edge', '#gOff', '#gW', '#gD'].forEach(id => $(id).addEventListener('input', recomputeDeb));
+['#figT', '#clear', '#border', '#plateT', '#spacerT', '#cornerR', '#keyD', '#minScrews', '#edge', '#gOff', '#gW', '#gD', '#lip', '#wall', '#faceT', '#fit', '#clips', '#clipW'].forEach(id => $(id).addEventListener('input', recomputeDeb));
 ['#screw'].forEach(id => $(id).addEventListener('change', () => P2.recompute()));
 $('#cbore').addEventListener('change', () => { $('#cboreHint').hidden = !$('#cbore').checked; P2.recompute(); });
 $('#toOutline').addEventListener('click', () => setPhase(1));
@@ -495,6 +503,8 @@ P2.params = () => ({
   keyring: $('#keyring').checked && P2.keyPos !== null, keyringD: Math.max(1.5, num('#keyD')), keyringPos: P2.keyPos || 0,
   join: joinSeg.value, screwList: P2.screwList, screw: $('#screw').value, counterbore: $('#cbore').checked, minScrews: Math.max(2, Math.round(num('#minScrews'))), edge: Math.max(0.5, num('#edge')),
   grooveOffset: Math.max(0.3, num('#gOff')), grooveWidth: Math.max(0.2, num('#gW')), grooveDepth: Math.max(0.1, num('#gD')),
+  lip: Math.max(1, num('#lip')), wall: Math.max(2, num('#wall')), faceT: Math.max(0.8, num('#faceT')), fit: Math.max(0.05, num('#fit') || 0.2),
+  clips: Math.max(0, Math.round(num('#clips')) || 0), clipW: Math.max(4, num('#clipW') || 6), // clips 0 = choose automatically
 });
 P2.enter = function () {
   if (!(P1.line && P1.mmPerPx)) $('#srcHint').textContent = 'Nothing traced yet. Set the scale and trace an outline in the Outline tab.';
@@ -513,18 +523,29 @@ P2.recompute = function () {
   if (!fig) { P2.cs = null; P2.show(); $('#analysis').hidden = true; $('#warnings').innerHTML = ''; $('#bom').innerHTML = ''; updateHud(); $('#srcHint').textContent = 'Nothing traced yet. Set the scale and trace an outline in the Outline tab.'; return; }
   P2.dirty = false;
   later(() => {
-    const p = P2.params(); const cs = CaseGen.build(fig, p); const ms = CaseGen.meshes(cs, p);
+    const p = P2.params(); const cs = Gen().build(fig, p); const ms = Gen().meshes(cs, p);
     P2.cs = cs; P2.meshes = ms; P2.p = p;
     const bb = Geo.bbox(cs.lines.outer);
-    const st = p.spacerT, pt = p.plateT;
-    viewer.setItems([
-      { mesh: ms.back, color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7], layer: 0, zc: pt / 2 },
-      { mesh: ms.figure, color: [0.90, 0.92, 0.95], alpha: 1, edge: [0.55, 0.59, 0.66, 0.5], layer: 1, zc: pt + p.figT / 2 },
-      { mesh: ms.spacer, color: [0.32, 0.78, 0.86], alpha: 0.55, edge: [0.22, 0.58, 0.66, 0.8], layer: 1, zc: pt + st / 2 },
-      { mesh: ms.front, color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7], layer: 2, zc: pt * 1.5 + st },
-      { screw: true, mesh: ms.screwHeads, color: [0.62, 0.65, 0.69], alpha: 1, edge: [0, 0, 0, 0], layer: 2.6, zc: 2 * pt + st },
-      { screw: true, mesh: ms.screwNuts, color: [0.55, 0.58, 0.62], alpha: 1, edge: [0, 0, 0, 0], layer: -0.6, zc: 0 },
-    ], bb);
+    if (P2.style === 'snap') {
+      const D = cs.dims, clear = { color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7] }, printed = { color: [0.16, 0.62, 0.70], alpha: 1, edge: [0.05, 0.30, 0.35, 0.8] };
+      viewer.setItems([ // layer = how many explode steps up or down the part moves
+        { mesh: ms.back, ...printed, layer: -2, zc: D.zm / 2 },
+        { mesh: ms.backSheet, ...clear, layer: -1, zc: p.faceT + p.plateT / 2 },
+        { mesh: ms.figure, color: [0.90, 0.92, 0.95], alpha: 1, edge: [0.55, 0.59, 0.66, 0.5], layer: 0, zc: D.zm },
+        { mesh: ms.frontSheet, ...clear, layer: 1, zc: D.zf - p.plateT / 2 },
+        { mesh: ms.front, ...printed, layer: 2, zc: (D.zm + D.H) / 2 },
+      ], bb);
+    } else {
+      const st = p.spacerT, pt = p.plateT;
+      viewer.setItems([
+        { mesh: ms.back, color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7], layer: 0, zc: pt / 2 },
+        { mesh: ms.figure, color: [0.90, 0.92, 0.95], alpha: 1, edge: [0.55, 0.59, 0.66, 0.5], layer: 1, zc: pt + p.figT / 2 },
+        { mesh: ms.spacer, color: [0.32, 0.78, 0.86], alpha: 0.55, edge: [0.22, 0.58, 0.66, 0.8], layer: 1, zc: pt + st / 2 },
+        { mesh: ms.front, color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7], layer: 2, zc: pt * 1.5 + st },
+        { screw: true, mesh: ms.screwHeads, color: [0.62, 0.65, 0.69], alpha: 1, edge: [0, 0, 0, 0], layer: 2.6, zc: 2 * pt + st },
+        { screw: true, mesh: ms.screwNuts, color: [0.55, 0.58, 0.62], alpha: 1, edge: [0, 0, 0, 0], layer: -0.6, zc: 0 },
+      ], bb);
+    }
     P2.updatePhoto(p);
     const key = Geo.bbox(fig).w.toFixed(1) + ',' + Geo.bbox(fig).h.toFixed(1); if (key !== P2.figKey) { P2.figKey = key; P2.lvOK = false; }
     const fb = Geo.bbox(cs.lines.figure); $('#srcHint').textContent = `Built from the traced outline, ${fmt(fb.w)} × ${fmt(fb.h)} mm. Edit it in the Outline tab.`;
@@ -551,9 +572,11 @@ P2.updatePhoto = function (p) {
   $('#photoBox').hidden = !ph;
   if (!ph) { viewer.setPhoto(null); return; }
   const [ox, oy] = P2.figOff;
-  viewer.setPhoto({ canvas: ph.canvas, x0: ph.x0 - ox, y0: ph.y0 - oy, x1: ph.x1 - ox, y1: ph.y1 - oy, z: p.plateT + p.figT + 0.08, layer: 1 });
+  const snap = P2.style === 'snap'; // the silhouette sits on the object, which is the middle layer of either stack
+  viewer.setPhoto({ canvas: ph.canvas, x0: ph.x0 - ox, y0: ph.y0 - oy, x1: ph.x1 - ox, y1: ph.y1 - oy, z: (snap ? p.faceT : 0) + p.plateT + p.figT + 0.08, layer: snap ? 0 : 1 });
 };
 P2.updateAnalysis = function () {
+  if (P2.style === 'snap') return P2.snap.updateAnalysis();
   const cs = P2.cs, p = P2.p, box = $('#analysis'); box.hidden = !cs.analysis && !cs.grooves;
   if (!cs.analysis && !cs.grooves) { box.innerHTML = ''; $('#t3sub').textContent = 'Not yet'; }
   else if (cs.analysis && !cs.analysis.screws.length) { box.hidden = true; box.innerHTML = ''; $('#t3sub').textContent = 'No screws yet'; }
@@ -568,6 +591,7 @@ P2.updateAnalysis = function () {
   $('#warnings').innerHTML = cs.warnings.map(w => `<div class="warn">${w}</div>`).join('');
 };
 P2.bomRows = function () {
+  if (P2.style === 'snap') return P2.snap.bomRows();
   const cs = P2.cs, p = P2.p; const bb = Geo.bbox(cs.lines.outer); const size = `${fmt(bb.w)} × ${fmt(bb.h)} mm`;
   const rows = [
     ['Front plate', `Clear cast acrylic, ${p.plateT} mm`, 1, size],
@@ -593,6 +617,7 @@ P2.fitLayout = function () {
   const s = Math.min(r.width / (bb.w + 20), r.height / (bb.h + 20)) * 0.9 || 1; P2.lv = { s, tx: r.width / 2 - bb.cx * s, ty: r.height / 2 - bb.cy * s };
 };
 P2.drawLayout = function () {
+  if (P2.style === 'snap') return P2.snap.drawLayout();
   const dpr = window.devicePixelRatio || 1; const r = cv2.getBoundingClientRect();
   cv2.width = Math.max(1, Math.round(r.width * dpr)); cv2.height = Math.max(1, Math.round(r.height * dpr));
   const c = ctx2; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv2.width, cv2.height);
@@ -612,7 +637,7 @@ P2.drawLayout = function () {
   }
   if (cs.analysis && cs.analysis.cb) for (const s of cs.analysis.screws) { const [X, Y] = T(s.x, s.y); c.beginPath(); c.arc(X, Y, cs.analysis.cb.headD / 2 * P2.lv.s * dpr, 0, Math.PI * 2); c.strokeStyle = eng; c.lineWidth = 1.5 * dpr; c.stroke(); }
   P2.drawOverlay();
-  $('#legEng').hidden = !cs.grooves && !(cs.analysis && cs.analysis.cb); $('#legScrew').hidden = !cs.analysis;
+  $('#legEng').hidden = !cs.grooves && !(cs.analysis && cs.analysis.cb); $('#legScrew').hidden = !cs.analysis; $('#legPrint').hidden = true;
 };
 (() => {
   let st = null; const pts = new Map();
@@ -628,6 +653,7 @@ P2.drawLayout = function () {
 // exports
 $$('[data-exp2]').forEach(b => b.addEventListener('click', () => P2.export(b.dataset.exp2)));
 P2.export = function (kind) {
+  if (P2.style === 'snap') return P2.snap.export(kind);
   const cs = P2.cs, p = P2.p; if (!cs) { toast('There’s no case to export yet.'); return; }
   const circles = cs.holes.map(h => ({ x: h.x, y: h.y, d: h.d }));
   const laserFiles = () => {
@@ -670,6 +696,86 @@ P2.export = function (kind) {
   else if (kind === 'all') saveFile('acrylic-case.zip', makeZip([
     ...laserFiles().map(f => ({ ...f, name: 'laser/' + f.name })),
     ...stlFiles().map(f => ({ ...f, name: '3d-parts/' + f.name })),
+    { name: 'parts-list.csv', data: csv() }]));
+};
+
+/* ---------- snap-fit frame: the parts that differ from the acrylic stack ---------- */
+P2.snap = {};
+P2.snap.updateAnalysis = function () {
+  const cs = P2.cs, p = P2.p, D = cs.dims, K = SnapGen.CLIP, box = $('#analysis'); box.hidden = false;
+  box.innerHTML = `<dl><dt>Clips</dt><dd>${cs.clips.length} × ${fmt(p.clipW)} mm wide</dd><dt>Clip tab</dt><dd>${fmt(K.tabT)} mm thick, hook ${fmt(K.barb)} mm</dd><dt>Case thickness</dt><dd>${fmt(D.H)} mm</dd><dt>Printed wall height, each border</dt><dd>${fmt(D.zm - p.faceT)} mm</dd></dl><p class="hint" style="margin:8px 0 0">Each clip is a springy tab on the front border with a hook at its tip. Press the borders together and the hooks click into notches in the back border. To open the case, lever each tab outward with a fingernail.</p>`;
+  $('#t3sub').textContent = `${cs.clips.length} clips`;
+  $('#warnings').innerHTML = cs.warnings.map(w => `<div class="warn">${w}</div>`).join('');
+};
+P2.snap.bomRows = function () {
+  const cs = P2.cs, p = P2.p; const ob = Geo.bbox(cs.lines.outer), sb = Geo.bbox(cs.lines.sheet);
+  const rows = [
+    ['Acrylic sheet', `Clear cast acrylic, ${p.plateT} mm`, 2, `${fmt(sb.w)} × ${fmt(sb.h)} mm, plain outline, no holes`],
+    ['Front border', '3D printed, PETG or PLA', 1, `${fmt(ob.w)} × ${fmt(ob.h)} mm, with ${cs.clips.length} clip tabs`],
+    ['Back border', '3D printed, PETG or PLA', 1, `${fmt(ob.w)} × ${fmt(ob.h)} mm, with ${cs.clips.length} clip notches`],
+  ];
+  if (p.keyring) rows.push(['Keyring', 'Split ring or jump ring', 1, `Fits a ${p.keyringD} mm hole in the printed borders`]);
+  rows.push(['Your object', `${p.figT} mm thick`, 1, '']);
+  return rows;
+};
+P2.snap.drawLayout = function () {
+  const dpr = window.devicePixelRatio || 1; const r = cv2.getBoundingClientRect();
+  cv2.width = Math.max(1, Math.round(r.width * dpr)); cv2.height = Math.max(1, Math.round(r.height * dpr));
+  const c = ctx2; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv2.width, cv2.height);
+  const T = (x, y) => [(x * P2.lv.s + P2.lv.tx) * dpr, (y * P2.lv.s + P2.lv.ty) * dpr];
+  drawMatGrid(c, cv2.width, cv2.height, (x, y) => [x * P2.lv.s + P2.lv.tx, y * P2.lv.s + P2.lv.ty], 1, P2.lv.s, dpr);
+  const cs = P2.cs; if (!cs) return;
+  const cut = css('--cut'), eng = css('--engrave'), ink = css('--mat-ink');
+  const poly = (l, stroke, w, fill, dash) => { if (!l) return; c.beginPath(); l.forEach(([x, y], i) => { const [X, Y] = T(x, y); i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.closePath(); if (fill) { c.fillStyle = fill; c.fill(); } if (stroke) { c.setLineDash(dash || []); c.strokeStyle = stroke; c.lineWidth = w * dpr; c.stroke(); c.setLineDash([]); } };
+  // printed border: filled ring between its outer edge and the window; acrylic sheet: the one laser cut
+  c.beginPath(); for (const l of [cs.lines.outer, cs.lines.window]) { l.forEach(([x, y], i) => { const [X, Y] = T(x, y); i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.closePath(); }
+  c.fillStyle = 'rgba(120,220,235,0.16)'; c.fill('evenodd');
+  poly(cs.lines.figure, null, 0, 'rgba(120,220,235,0.22)');
+  poly(cs.lines.outer, ink, 1.5); poly(cs.lines.window, ink, 1.5);
+  poly(cs.lines.sheet, cut, 2);
+  const hw = P2.p.clipW / 2, tabT = SnapGen.CLIP.tabT;
+  for (const cl of cs.clips) { // each clip tab, on the outside of the wall
+    const pt = (u, v) => [cl.x + cl.tx * u + cl.nx * v, cl.y + cl.ty * u + cl.ny * v];
+    poly([pt(-hw, cl.vt), pt(hw, cl.vt), pt(hw, cl.vt + tabT), pt(-hw, cl.vt + tabT)], ink, 1, ink);
+  }
+  for (const h of cs.holes) { const [X, Y] = T(h.x, h.y); c.beginPath(); c.arc(X, Y, Math.max(1.5 * dpr, h.d / 2 * P2.lv.s * dpr), 0, Math.PI * 2); c.strokeStyle = ink; c.lineWidth = 1.5 * dpr; c.stroke(); }
+  P2.drawOverlay();
+  $('#legEng').hidden = $('#legScrew').hidden = true; $('#legPrint').hidden = false;
+};
+P2.snap.export = function (kind) {
+  const cs = P2.cs, p = P2.p; if (!cs) { toast('There’s no case to export yet.'); return; }
+  const laserFiles = () => {
+    const bb = Geo.bbox(cs.lines.sheet), dx = bb.w + 5;
+    const sheets = [{ layer: 'CUT', id: 'sheets', loops: [cs.lines.sheet, cs.lines.sheet.map(([x, y]) => [x + dx, y])] }];
+    const name = `acrylic-sheets_${p.plateT}mm`;
+    const readme = ['Laser file for the two acrylic sheets', '', 'Units: millimetres. Red = cut.', `Each sheet: ${fmt(bb.w)} x ${fmt(bb.h)} mm. The file holds both.`, '',
+      `Cut once from ${p.plateT} mm clear acrylic. The sheets are plain outlines with no holes.`,
+      'Kerf (about 0.1-0.2 mm) makes the sheets slightly smaller, which only adds clearance in the printed borders.',
+      'Peel the protective film off before assembly.'].join('\n');
+    return [{ name: name + '.dxf', data: toDXF(sheets) }, { name: name + '.svg', data: toSVG(sheets) }, { name: 'README.txt', data: readme }];
+  };
+  const stlFiles = () => {
+    const m = P2.meshes, D = cs.dims;
+    // The front border is turned over (half a turn about x) so both borders print with their flat face on the bed.
+    const turned = { pos: m.front.pos.map((v, i) => i % 3 === 0 ? v : i % 3 === 1 ? -v : D.H - v), nor: m.front.nor.map((v, i) => i % 3 === 0 ? v : -v) };
+    const notes = ['Printing the two borders', '',
+      'Print both files as they are: flat face on the bed, no supports, 0.2 mm layers or finer.',
+      'PETG flexes best for the clips. PLA works but the tabs are more brittle.',
+      `The clip tabs are ${fmt(SnapGen.CLIP.tabT)} mm thick with a ${fmt(SnapGen.CLIP.barb)} mm hook. The parts leave ${fmt(p.fit)} mm clearance.`,
+      'If the borders will not close, or the sheets will not drop in, raise "Print fit clearance" and export again.', '',
+      'Assembly: back border face down, acrylic sheet, your object, acrylic sheet, then press the front border on until every clip clicks.',
+      'To open: lever each clip tab outward with a fingernail.'].join('\n');
+    return [{ name: 'back_border.stl', data: toSTL(m.back, 'back border') }, { name: 'front_border.stl', data: toSTL(turned, 'front border') },
+      { name: 'reference_acrylic_sheet.stl', data: toSTL(m.backSheet, 'acrylic sheet') }, { name: 'reference_object.stl', data: toSTL(m.figure, 'object') },
+      { name: 'PRINTING.txt', data: notes }];
+  };
+  const csv = () => { const q = s => '"' + String(s).replace(/"/g, '""') + '"'; return ['Part,Spec,Qty,Notes', ...P2.snap.bomRows().map(r => [r[0], r[1], r[2], r[3]].map(q).join(','))].join('\n') + '\n'; };
+  if (kind === 'laser') saveFile('snap-case-acrylic-laser-files.zip', makeZip(laserFiles()));
+  else if (kind === 'stl') saveFile('snap-case-3d-print-files.zip', makeZip(stlFiles()));
+  else if (kind === 'csv') saveFile('snap-case-parts.csv', csv());
+  else if (kind === 'all') saveFile('snap-case.zip', makeZip([
+    ...laserFiles().map(f => ({ ...f, name: 'laser/' + f.name })),
+    ...stlFiles().map(f => ({ ...f, name: '3d-print/' + f.name })),
     { name: 'parts-list.csv', data: csv() }]));
 };
 

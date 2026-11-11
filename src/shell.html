@@ -236,23 +236,32 @@ input[type=file]{display:none}
           <button class="head"><span class="num">1</span><span class="title">Layers and fit</span><span class="sub" id="t2sub"></span></button>
           <div class="body">
             <p class="hint" id="srcHint"></p>
+            <div class="seg" id="styleSeg"><button data-v="acrylic" aria-pressed="true">Acrylic stack</button><button data-v="snap" aria-pressed="false">Snap-fit frame</button></div>
+            <p class="hint" data-style="acrylic">Three laser-cut acrylic layers: front plate, spacer round the object, back plate.</p>
+            <p class="hint" data-style="snap" hidden>Two plain acrylic sheets hold the object. Two 3D-printed borders clip together round them. No screws.</p>
             <div class="row"><label for="figT">Object thickness</label><input type="number" id="figT" value="1" min="0.1" step="0.1"><span class="val">mm</span></div>
             <div class="row"><label for="clear">Gap around object</label><input type="number" id="clear" value="1" min="0" step="0.1"><span class="val">mm</span></div>
-            <div class="row"><label for="border">Border width</label><input type="number" id="border" value="6.5" min="2" step="0.5"><span class="val">mm</span></div>
-            <div class="row"><label for="plateT">Front and back acrylic</label><input type="number" id="plateT" value="2" min="0.5" step="0.1"><span class="val">mm</span></div>
-            <div class="row"><label for="spacerT">Spacer acrylic</label><input type="number" id="spacerT" value="1.5" min="0.5" step="0.1"><span class="val">mm</span></div>
+            <div class="row" data-style="acrylic"><label for="border">Border width</label><input type="number" id="border" value="6.5" min="2" step="0.5"><span class="val">mm</span></div>
+            <div class="row"><label for="plateT">Front and back acrylic, each</label><input type="number" id="plateT" value="2" min="0.5" step="0.1"><span class="val">mm</span></div>
+            <div class="row" data-style="acrylic"><label for="spacerT">Spacer acrylic</label><input type="number" id="spacerT" value="1.5" min="0.5" step="0.1"><span class="val">mm</span></div>
+            <div class="row" data-style="snap" hidden><label for="lip">Border overlap on the acrylic</label><input type="number" id="lip" value="2" min="1" step="0.5"><span class="val">mm</span></div>
+            <div class="row" data-style="snap" hidden><label for="wall">Printed wall width</label><input type="number" id="wall" value="3.6" min="2" step="0.2"><span class="val">mm</span></div>
+            <div class="row" data-style="snap" hidden><label for="faceT">Printed face thickness</label><input type="number" id="faceT" value="1.6" min="0.8" step="0.2"><span class="val">mm</span></div>
+            <div class="row" data-style="snap" hidden><label for="fit">Print fit clearance</label><input type="number" id="fit" value="0.2" min="0.05" step="0.05"><span class="val">mm</span></div>
             <div class="row"><label for="cornerR">Inside corner radius</label><input type="number" id="cornerR" value="1.5" min="0" step="0.5"><span class="val">mm</span></div>
             <label class="check"><input type="checkbox" id="keyring">Add a keyring hole</label>
             <div id="keyRows" hidden>
               <div class="row"><label for="keyD">Hole diameter</label><input type="number" id="keyD" value="4" min="1.5" step="0.5"><span class="val">mm</span></div>
-              <p class="hint" id="keyHint">Click where you want the hole on the 3D model or the cut layout. It goes on the nearest edge.</p>
+              <p class="hint" id="keyHint">Click where you want the hole on the 3D model or the layout. It goes on the nearest edge.</p>
               <div class="btns"><button class="btn" id="keyPlace" aria-pressed="false">Move the hole</button></div>
+              <p class="hint" data-style="snap" hidden>The hole goes through the printed borders only. The acrylic stays plain.</p>
             </div>
           </div>
         </section>
         <section class="step" data-step="3">
-          <button class="head"><span class="num">2</span><span class="title">Join the layers</span><span class="sub" id="t3sub"></span></button>
+          <button class="head"><span class="num">2</span><span class="title" id="t3title">Join the layers</span><span class="sub" id="t3sub"></span></button>
           <div class="body">
+            <div data-style="acrylic">
             <div class="seg" id="joinSeg"><button data-v="none" aria-pressed="true">Not yet</button><button data-v="screws" aria-pressed="false">Screws</button><button data-v="solvent" aria-pressed="false">Solvent cement</button></div>
             <p class="hint" id="noneRows">The case is shown without screws or grooves. Pick a join method when you’re ready.</p>
             <div id="screwRows" hidden>
@@ -271,6 +280,12 @@ input[type=file]{display:none}
               <div class="row"><label for="gW">Groove width</label><input type="number" id="gW" value="0.5" min="0.2" step="0.1"><span class="val">mm</span></div>
               <div class="row"><label for="gD">Groove depth</label><input type="number" id="gD" value="0.3" min="0.1" step="0.05"><span class="val">mm</span></div>
             </div>
+            </div>
+            <div data-style="snap" hidden>
+              <div class="row"><label for="clips">Number of clips</label><input type="number" id="clips" placeholder="auto" min="2" step="1"><span class="val"></span></div>
+              <div class="row"><label for="clipW">Clip width</label><input type="number" id="clipW" value="6" min="4" step="0.5"><span class="val">mm</span></div>
+              <p class="hint">Leave the number empty to space clips about every 45 mm. They are moved onto the straightest parts of the wall.</p>
+            </div>
             <div class="readout" id="analysis" hidden></div>
             <div id="warnings"></div>
           </div>
@@ -285,14 +300,15 @@ input[type=file]{display:none}
               <button class="btn exp" data-exp2="stl">3D parts (.zip)</button>
               <button class="btn exp" data-exp2="csv">Parts list (.csv)</button>
             </div>
-            <p class="hint">Everything puts the laser files, 3D parts and parts list in one zip, each in its own folder. Laser files are DXF and SVG in millimetres, with cuts in red and engraving in blue. Both plates are on one sheet.</p>
+            <p class="hint" data-style="acrylic">Everything puts the laser files, 3D parts and parts list in one zip, each in its own folder. Laser files are DXF and SVG in millimetres, with cuts in red and engraving in blue. Both plates are on one sheet.</p>
+            <p class="hint" data-style="snap" hidden>Everything puts the laser files, print files and parts list in one zip, each in its own folder. The laser file holds both acrylic sheets. The 3D parts are the two borders, each laid flat face down, ready to print without supports.</p>
           </div>
         </section>
       </div>
     </aside>
     <div class="stage" id="stage">
       <canvas id="cv1" aria-label="Photo and outline work area"></canvas>
-      <canvas id="cv2" hidden aria-label="Cut layout"></canvas>
+      <canvas id="cv2" hidden aria-label="Layout"></canvas>
       <canvas id="cv3" hidden aria-label="3D model"></canvas>
       <canvas id="keyPreview" aria-hidden="true"></canvas>
       <div class="hud" id="hud"></div>
@@ -300,11 +316,11 @@ input[type=file]{display:none}
         <label class="explode" id="photoBox" hidden><input type="checkbox" id="showPhoto" checked>Silhouette</label>
         <label class="explode" id="screwBox" hidden><input type="checkbox" id="showScrews" checked>Screws</label>
         <div class="explode" id="explodeBox"><label for="explode">Explode</label><input type="range" id="explode" min="0" max="1" step="0.01" value="0.35"></div>
-        <div class="seg" id="viewSeg"><button data-v="3d" aria-pressed="true">3D model</button><button data-v="layout" aria-pressed="false">Cut layout</button></div>
+        <div class="seg" id="viewSeg"><button data-v="3d" aria-pressed="true">3D model</button><button data-v="layout" aria-pressed="false">Layout</button></div>
       </div>
       <div class="cubebox" id="cubeBox" hidden><canvas id="cube" title="Click a face, edge or corner to look from there. Drag to orbit. Arrows step to the next face or turn the view." aria-label="View cube"></canvas><button id="cubeHome" title="Home view" aria-label="Home view">⌂</button></div>
       <div class="navhint" id="navHint" hidden><b>Middle drag</b> pan · <b>Shift + middle drag</b> orbit · <b>Scroll</b> or <b>pinch</b> zoom at cursor · <b>Two-finger drag</b> pan · <b>Double-click middle</b> fit<span class="alt"> · Left drag also orbits, right drag also pans</span></div>
-      <div class="legend" id="legend" hidden><span><i style="color:var(--cut)"></i>Cut</span><span id="legEng"><i style="color:var(--engrave)"></i>Engrave</span><span id="legScrew"><i style="color:var(--mat-ink);border-top-style:dashed"></i>Screw line</span></div>
+      <div class="legend" id="legend" hidden><span><i style="color:var(--cut)"></i>Cut</span><span id="legEng"><i style="color:var(--engrave)"></i>Engrave</span><span id="legScrew"><i style="color:var(--mat-ink);border-top-style:dashed"></i>Screw line</span><span id="legPrint" hidden><i style="color:var(--mat-ink)"></i>Printed border</span></div>
       <div class="tools" id="tools"><button id="zoomOut" aria-label="Zoom out">−</button><button id="zoomFit" aria-label="Fit to view">Fit</button><button id="zoomIn" aria-label="Zoom in">+</button></div>
       <div class="empty" id="empty1"><div class="card"><h2>Trace any flat object into a cut-ready outline</h2><p>Upload a photo with a ruler or grid paper in the shot. Everything runs in your browser.</p><label class="btn" for="file1">Choose photo</label></div></div>
       <div class="empty" id="empty2" hidden><div class="card"><h2>No outline yet</h2><p>The case is built from the traced outline. Set the scale and trace your object in the Outline tab first.</p><button class="btn" id="toOutline">Go to Outline</button></div></div>
@@ -315,6 +331,7 @@ input[type=file]{display:none}
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>/*GEOM*/</script>
 <script>/*CASEGEN*/</script>
+<script>/*SNAPGEN*/</script>
 <script>/*APP*/</script>
 </body>
 </html>
