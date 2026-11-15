@@ -39,38 +39,27 @@ const SnapGen = (() => {
         outerS = G.closing(G.fmax(outerS, G.circleField(g, ring.x, ring.y, ringR + RING_TAB)), g.W, g.H, sc, 2);
       }
     }
-    // clips: spread round the middle of the wall, nudged onto its straightest stretches and away from the keyring tab
-    let clips = [];
+    // clips sit on the middle of the wall: the user's own list (p.clipList, mm) snapped onto it, or an automatic set
+    let clips = [], cp = null;
     const mid = G.largestLoopMM(G.add(sheetS, c + p.wall / 2), g);
     if (mid) {
-      const path = G.resample(G.smoothLoop(mid, 3), 0.5), n = path.length, L = n * 0.5;
+      const path = G.resample(G.smoothLoop(mid, 3), 0.5), n = path.length;
       const hw = p.clipW / 2, k = Math.max(2, Math.round((hw + 2) / 0.5));
       const sag = path.map((q, i) => { // how far the wall bows from a straight line across the clip
         const a = path[(i - k + n) % n], b = path[(i + k) % n], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1;
         return Math.abs((q[0] - a[0]) * dy - (q[1] - a[1]) * dx) / l;
       });
       const free = path.map(([x, y]) => !ring || Math.hypot(x - ring.x, y - ring.y) > ringR + RING_TAB + hw + 2);
-      const N = p.clips > 0 ? Math.round(p.clips) : Math.max(3, Math.round(L / 45));
-      let best = null;
-      for (let ph = 0; ph < 16; ph++) {
-        const idx = []; let cost = 0;
-        for (let j = 0; j < N; j++) {
-          const target = Math.round((j + ph / 16) / N * n) % n, win = Math.floor(n / N / 4);
-          let bi = -1, bc = Infinity;
-          for (let d = -win; d <= win; d++) { const q = (target + d + n) % n; if (!free[q]) continue; const v = sag[q] + Math.abs(d) * 0.0005; if (v < bc) { bc = v; bi = q; } }
-          if (bi < 0) { cost += 10; continue; }
-          idx.push(bi); cost += bc;
-        }
-        if (!best || cost < best.cost) best = { idx, cost };
-      }
-      clips = [...new Set(best.idx)].sort((a, b) => a - b).map((q, j) => {
-        const a = path[(q - k + n) % n], b = path[(q + k) % n]; let tx = b[0] - a[0], ty = b[1] - a[1]; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
-        let nx = ty, ny = -tx; const [x, y] = path[q];
-        if (G.sample(outerS, g, x + nx, y + ny) > G.sample(outerS, g, x - nx, y - ny)) { nx = -nx; ny = -ny; } // n points out of the case
-        // vt = inner face of the tab, measured outward from the middle of the wall
-        return { x, y, tx, ty, nx, ny, vt: G.sample(outerS, g, x, y) - CLIP.tabT, sag: sag[q], n: j + 1 };
-      });
+      cp = { path, sag, free, k, outerS, g };
+      const idx = p.clipList ? p.clipList.map(([x, y]) => nearest(path, x, y)) : autoClips(cp, autoCount(cp, p));
+      clips = framesOf(cp, idx);
       if (clips.some(cl => cl.sag > 0.6)) warnings.push('Some clips sit on a tight curve, so their tabs won’t lie flat against the wall. Use narrower clips or fewer of them.');
+      if (p.clipList) {
+        if (clips.some(cl => !cl.ok)) warnings.push('A clip is too close to the keyring tab. Move it along the wall.');
+        const gapMin = p.clipW + 2 * CLIP.slit + 2;
+        if (clips.some((cl, j) => j && Math.hypot(cl.x - clips[j - 1].x, cl.y - clips[j - 1].y) < gapMin) || (clips.length > 1 && Math.hypot(clips[0].x - clips[clips.length - 1].x, clips[0].y - clips[clips.length - 1].y) < gapMin))
+          warnings.push(`Two clips are closer than ${gapMin.toFixed(0)} mm, so their slots run into each other. Remove one or move them apart.`);
+      }
     }
     if (clips.length < 3) warnings.push('Fewer than three clips fit, so the borders can pull apart at one side. Use narrower clips or a larger outline.');
     const minWall = CLIP.tabT + CLIP.barb + c + 1;
@@ -82,8 +71,42 @@ const SnapGen = (() => {
       cavity: G.largestLoopMM(cavS, g), outer: G.largestLoopMM(outerS, g),
     };
     const holes = ring ? [{ x: ring.x, y: ring.y, d: ring.d, kind: 'keyring' }] : [];
-    return { g, fields, lines, holes, clips, dims: D, warnings, params: { ...p } };
+    return { g, fields, lines, holes, clips, clipPath: cp, dims: D, warnings, params: { ...p } };
   }
+
+  // Clip helpers. cp is the wall's mid-line from build(): points every 0.5 mm, how much it bows (sag) and where
+  // a clip is allowed (free, away from the keyring tab).
+  const nearest = (path, x, y) => { let bi = 0, bd = Infinity; path.forEach(([px, py], i) => { const d = (px - x) ** 2 + (py - y) ** 2; if (d < bd) { bd = d; bi = i; } }); return bi; };
+  const autoCount = (cp, p) => p.clips > 0 ? Math.round(p.clips) : Math.max(3, Math.round(cp.path.length * 0.5 / 45)); // about every 45 mm
+  // N clips spread evenly, each nudged onto the straightest nearby stretch; the phase with the straightest total wins.
+  function autoClips(cp, N) {
+    const { sag, free } = cp, n = sag.length; let best = null;
+    for (let ph = 0; ph < 16; ph++) {
+      const idx = []; let cost = 0;
+      for (let j = 0; j < N; j++) {
+        const target = Math.round((j + ph / 16) / N * n) % n, win = Math.floor(n / N / 4);
+        let bi = -1, bc = Infinity;
+        for (let d = -win; d <= win; d++) { const q = (target + d + n) % n; if (!free[q]) continue; const v = sag[q] + Math.abs(d) * 0.0005; if (v < bc) { bc = v; bi = q; } }
+        if (bi < 0) { cost += 10; continue; }
+        idx.push(bi); cost += bc;
+      }
+      if (!best || cost < best.cost) best = { idx, cost };
+    }
+    return best.idx;
+  }
+  // A clip's frame at mid-line point q: t along the wall, n out of the case, vt = inner face of the tab measured outward.
+  function clipFrame(cp, q, num) {
+    const { path, k, outerS, g } = cp, n = path.length, G = Geo;
+    const a = path[(q - k + n) % n], b = path[(q + k) % n]; let tx = b[0] - a[0], ty = b[1] - a[1]; const l = Math.hypot(tx, ty) || 1; tx /= l; ty /= l;
+    let nx = ty, ny = -tx; const [x, y] = path[q];
+    if (G.sample(outerS, g, x + nx, y + ny) > G.sample(outerS, g, x - nx, y - ny)) { nx = -nx; ny = -ny; }
+    return { x, y, tx, ty, nx, ny, vt: G.sample(outerS, g, x, y) - CLIP.tabT, sag: cp.sag[q], ok: cp.free[q], n: num };
+  }
+  const framesOf = (cp, idx) => [...new Set(idx)].sort((a, b) => a - b).map((q, j) => clipFrame(cp, q, j + 1));
+  // The automatic clip set for a built case, ignoring the user's list: used for the Generate preview.
+  const planClips = (cs, p) => cs.clipPath ? framesOf(cs.clipPath, autoClips(cs.clipPath, autoCount(cs.clipPath, p))) : [];
+  // Where a clip added at (x, y) would land.
+  const clipAt = (cs, x, y) => cs.clipPath ? clipFrame(cs.clipPath, nearest(cs.clipPath.path, x, y), 0) : null;
 
   // The pocket edge as a path that starts at its topmost point and runs one fixed way round,
   // so a fraction 0..1 names a spot on the edge.
@@ -177,6 +200,6 @@ const SnapGen = (() => {
       figure: G.extrude(figF, fb, p.faceT + p.plateT, p.faceT + p.plateT + p.figT),
     };
   }
-  return { build, meshes, edgeParam, ringAt, dims, CLIP };
+  return { build, meshes, edgeParam, ringAt, planClips, clipAt, dims, CLIP };
 })();
 if (typeof module !== 'undefined') module.exports = SnapGen;

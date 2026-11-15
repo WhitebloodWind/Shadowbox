@@ -24,6 +24,15 @@ for (const cl of cs.clips) {
 }
 assert.strictEqual(SnapGen.build(circ(30), { ...p, clips: 7 }).clips.length, 7, 'clip count can be set');
 
+// Clips the user places: each snaps onto the wall mid-line; Generate's plan matches the automatic set.
+const own = SnapGen.build(circ(30), { ...p, clipList: [[40, 0], [0, 40], [-40, 0], [0, -40]] });
+assert.strictEqual(own.clips.length, 4, 'one clip per listed point');
+for (const cl of own.clips) near(Math.hypot(cl.x, cl.y), 35, 0.3, 'listed clip snaps to the mid-line');
+assert.ok(own.clips.some(cl => cl.x > 34 && Math.abs(cl.y) < 1), 'clip lands nearest its point');
+assert.strictEqual(SnapGen.planClips(own, p).length, cs.clips.length, 'plan ignores the list');
+near(Math.hypot(SnapGen.clipAt(cs, 50, 3).x, SnapGen.clipAt(cs, 50, 3).y), 35, 0.3, 'hover position is on the mid-line');
+assert.ok(SnapGen.build(circ(30), { ...p, clipList: [[35, 0], [35, 2]] }).warnings.some(w => w.includes('closer')), 'crowded clips warn');
+
 // Heights: the borders meet at mid-height and the tab tip stays inside the back border.
 const D = cs.dims; near(D.H, 8.2, 1e-9, 'case thickness'); near(D.zm, 4.1, 1e-9, 'mid-height'); assert.ok(D.zt > 0 && D.zt < p.faceT, 'tab tip stops short of the back face');
 

@@ -398,11 +398,11 @@ const viewSeg = seg('#viewSeg', v => { P2.view = v; P2.show(); });
 $('#explode').addEventListener('input', () => { viewer.explode = +$('#explode').value; viewer.render(); });
 $('#showPhoto').addEventListener('change', () => { viewer.showPhoto = $('#showPhoto').checked; viewer.render(); });
 $('#showScrews').addEventListener('change', () => { viewer.showScrews = $('#showScrews').checked; viewer.render(); });
-const joinSeg = seg('#joinSeg', v => { P2.setScrewMode(null); P2.setScrewPreview(null); $('#noneRows').hidden = v !== 'none'; $('#screwRows').hidden = v !== 'screws'; $('#solventRows').hidden = v !== 'solvent'; P2.recompute(); });
+const joinSeg = seg('#joinSeg', v => { P2.setEditMode(null); P2.setPlanPreview(null); $('#noneRows').hidden = v !== 'none'; $('#screwRows').hidden = v !== 'screws'; $('#solventRows').hidden = v !== 'solvent'; P2.recompute(); });
 // Case style: the acrylic stack (CaseGen) or the snap-fit printed frame (SnapGen). Rows marked data-style show for one style only.
 P2.style = 'acrylic'; const Gen = () => P2.style === 'snap' ? SnapGen : CaseGen;
 const styleSeg = seg('#styleSeg', v => {
-  P2.style = v; P2.setScrewMode(null); P2.setScrewPreview(null);
+  P2.style = v; P2.setEditMode(null); P2.setPlanPreview(null);
   $$('[data-style]').forEach(el => { el.hidden = el.dataset.style !== v; });
   $('#t3title').textContent = v === 'snap' ? 'Snap clips' : 'Join the layers';
   P2.cs = null; P2.recompute();
@@ -412,16 +412,16 @@ $('#keyring').addEventListener('change', () => { const on = $('#keyring').checke
 // Keyring placement: click the button, then click the case in either view.
 P2.placing = false;
 P2.setPlacing = function (on) {
-  if (on && P2.screwMode) P2.setScrewMode(null);
+  if (on && P2.editMode) P2.setEditMode(null);
   P2.placing = on; $('#keyPlace').setAttribute('aria-pressed', String(on)); $('#keyPlace').textContent = on ? 'Cancel' : P2.keyPos === null ? 'Place the hole' : 'Move the hole';
-  $('#keyHint').textContent = on ? 'Click where you want the hole on the 3D model or the cut layout. It goes on the nearest edge. Esc cancels.' : P2.keyPos === null ? 'The hole isn’t placed yet.' : 'The hole is placed. Click Move the hole to put it somewhere else.';
+  $('#keyHint').textContent = on ? 'Click where you want the hole on the 3D model or the layout. It goes on the nearest edge. Esc cancels.' : P2.keyPos === null ? 'The hole isn’t placed yet.' : 'The hole is placed. Click Move the hole to put it somewhere else.';
   $('#cv2').style.cursor = $('#cv3').style.cursor = on ? 'crosshair' : '';
-  if (!on && P2.drawKeyPreview) P2.drawKeyPreview(null);
+  if (!on) P2.setHover(null);
 };
 $('#keyPlace').addEventListener('click', () => P2.setPlacing(!P2.placing));
-// Hover preview while placing: the hole and the tab of acrylic round it, where a click would put them.
-P2.drawKeyPreview = function (mm) { P2.keyHover = mm; P2.drawOverlay(); };
-// Overlay drawn over either view: the suggested screws while previewing, and the keyring hole under the cursor while placing.
+// The cursor position in case mm while placing the keyring or adding/removing screws or clips; drives the hover preview.
+P2.setHover = function (mm) { P2.hover = mm; P2.drawOverlay(); };
+// Overlay drawn over either view: a Generate preview, and what a click would do at the cursor.
 P2.drawOverlay = function () {
   const ov = $('#keyPreview'), r = ov.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
   ov.width = Math.max(1, Math.round(r.width * dpr)); ov.height = Math.max(1, Math.round(r.height * dpr));
@@ -431,58 +431,107 @@ P2.drawOverlay = function () {
   const toScr = P2.view === '3d'
     ? (x, y) => { const q = viewer.project([x, -y, viewer.clickZ()]); return q && [q[0] + ox, q[1] + oy]; }
     : (x, y) => [x * P2.lv.s + P2.lv.tx + ox, y * P2.lv.s + P2.lv.ty + oy];
-  const ring0 = { x: 0, y: 0 }; let ring = ring0;
-  const circle = rad => { const pts = []; for (let k = 0; k <= 48; k++) { const a = k / 48 * 2 * Math.PI, q = toScr(ring.x + rad * Math.cos(a), ring.y + rad * Math.sin(a)); if (!q) return false; pts.push(q); } c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); return true; };
-  if (P2.screwPreview) for (const s of P2.screwPreview.screws) { // dashed head outline + hole, numbered
-    ring = s; const sp = P2.screwPreview.spec;
-    if (circle(sp.head / 2 + 0.6)) { c.setLineDash([4, 3]); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke(); c.setLineDash([]); }
-    if (circle(sp.hole / 2)) { c.fillStyle = 'rgba(80,210,230,0.55)'; c.fill(); }
-    const at = toScr(s.x + sp.head / 2 + 1, s.y - sp.head / 2 - 1); if (at) { c.font = '700 11px Archivo, sans-serif'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.fillStyle = '#fff'; c.strokeText(String(s.n), at[0], at[1]); c.fillText(String(s.n), at[0], at[1]); }
+  const path = pts => { const q = pts.map(([x, y]) => toScr(x, y)); if (q.some(v => !v)) return false; c.beginPath(); q.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); return true; };
+  const circle = (o, rad) => path(Array.from({ length: 48 }, (_, k) => [o.x + rad * Math.cos(k / 24 * Math.PI), o.y + rad * Math.sin(k / 24 * Math.PI)]));
+  const dashed = (col = '#fff') => { c.setLineDash([5, 4]); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = col; c.stroke(); c.setLineDash([]); };
+  const label = (x, y, text) => { const at = toScr(x, y); if (!at) return; c.font = '700 11px Archivo, sans-serif'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.fillStyle = '#fff'; c.strokeText(text, at[0] + 4, at[1] - 4); c.fillText(text, at[0] + 4, at[1] - 4); };
+  const spec = () => CaseGen.SCREWS[P2.p.screw];
+  const drawScrew = (s, col) => { const sp = spec(); if (circle(s, sp.head / 2 + 0.6)) dashed(col); if (circle(s, sp.hole / 2)) { c.fillStyle = 'rgba(80,210,230,0.55)'; c.fill(); } };
+  const drawClip = (cl, col) => { // the clip's slot across the wall, dashed, with its tab filled
+    const hw = P2.p.clipW / 2, w = P2.p.wall / 2, t = SnapGen.CLIP.tabT, pt = (u, v) => [cl.x + cl.tx * u + cl.nx * v, cl.y + cl.ty * u + cl.ny * v];
+    if (path([pt(-hw, -w), pt(hw, -w), pt(hw, w), pt(-hw, w)])) dashed(col);
+    if (path([pt(-hw, cl.vt), pt(hw, cl.vt), pt(hw, cl.vt + t), pt(-hw, cl.vt + t)])) { c.fillStyle = 'rgba(80,210,230,0.75)'; c.fill(); }
+  };
+  const draw = (o, col) => isSnap() ? drawClip(o, col) : drawScrew(o, col);
+  const reach = () => isSnap() ? P2.p.clipW / 2 + 1 : spec().head / 2 + 1;
+  if (P2.planPreview) for (const o of P2.planPreview.items) { draw(o); label(o.x + reach(), o.y - reach(), String(o.n)); }
+  const mm = P2.hover; if (!mm) return;
+  if (P2.placing) {
+    const ring = Gen().ringAt(P2.cs, mm[0], mm[1], Math.max(1.5, num('#keyD'))); if (!ring) return;
+    if (circle(ring, ring.tab)) dashed();
+    if (circle(ring, ring.d / 2)) { c.fillStyle = 'rgba(80,210,230,0.30)'; c.fill(); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#6FE3F2'; c.stroke(); }
+    label(ring.x + ring.tab, ring.y - ring.tab, `Keyring ${fmt(ring.d)} mm`);
+  } else if (P2.editMode === 'add') {
+    const at = P2.addAt(mm[0], mm[1]); if (!at) return;
+    draw(at); label(at.x + reach(), at.y - reach(), isSnap() ? 'New clip' : 'New screw');
+  } else if (P2.editMode === 'remove') {
+    const o = P2.nearestPlaced(mm[0], mm[1]); if (!o) return;
+    if (circle(o, reach() + 1)) dashed('#FF6B5E');
+    label(o.x + reach(), o.y - reach(), isSnap() ? 'Remove clip' : 'Remove screw');
   }
-  const mm = P2.keyHover; if (!mm || !P2.placing) return;
-  ring = Gen().ringAt(P2.cs, mm[0], mm[1], Math.max(1.5, num('#keyD'))); if (!ring) return;
-  if (circle(ring.tab)) { c.setLineDash([5, 4]); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.5)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#fff'; c.stroke(); c.setLineDash([]); }
-  if (circle(ring.d / 2)) { c.fillStyle = 'rgba(80,210,230,0.30)'; c.fill(); c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.stroke(); c.lineWidth = 1.5; c.strokeStyle = '#6FE3F2'; c.stroke(); }
-  const at = toScr(ring.x + ring.tab, ring.y - ring.tab); if (!at) return;
-  const label = `Keyring ${fmt(ring.d)} mm`; c.font = '600 11px Archivo, sans-serif'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,0.6)'; c.fillStyle = '#fff';
-  c.strokeText(label, at[0] + 4, at[1] - 4); c.fillText(label, at[0] + 4, at[1] - 4);
 };
-$('#cv3').addEventListener('pointermove', e => { if (!P2.placing || e.buttons) return; const h = viewer.pickPlane(e.clientX, e.clientY, viewer.clickZ()); P2.drawKeyPreview(h && [h[0], -h[1]]); });
-$('#cv2').addEventListener('pointermove', e => { if (!P2.placing || e.buttons) return; const r = cv2.getBoundingClientRect(); P2.drawKeyPreview([(e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s]); });
-['#cv2', '#cv3'].forEach(id => $(id).addEventListener('pointerleave', () => P2.drawKeyPreview(null)));
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && P2.placing) P2.setPlacing(false); if (e.key === 'Escape' && P2.screwMode) P2.setScrewMode(null); });
-// Screws: the case uses P2.screwList (case mm, snapped onto the screw line when built). Generate shows a
-// suggested set as a preview to accept or discard; Add and Remove edit the list at any time.
-P2.screwList = []; P2.screwMode = null; P2.screwPreview = null;
-P2.screwHintText = () => P2.screwMode === 'add' ? 'Click the border where the new screw should go. Esc cancels.' : P2.screwMode === 'remove' ? 'Click the screw to remove. Esc cancels.'
-  : P2.screwList.length ? `${P2.screwList.length} screw${P2.screwList.length === 1 ? '' : 's'} placed. Add or remove screws at any time, or generate a new set.` : 'No screws yet. Generate a suggested set, or add your own by clicking the case.';
-P2.setScrewMode = function (mode) {
-  P2.screwMode = mode; if (mode && P2.placing) P2.setPlacing(false);
-  $('#screwAdd').setAttribute('aria-pressed', String(mode === 'add')); $('#screwDel').setAttribute('aria-pressed', String(mode === 'remove'));
-  $('#screwHint').textContent = P2.screwHintText();
+['#cv2', '#cv3'].forEach(id => {
+  $(id).addEventListener('pointermove', e => {
+    if (!(P2.placing || P2.editMode) || e.buttons) return;
+    if (id === '#cv3') { const h = viewer.pickPlane(e.clientX, e.clientY, viewer.clickZ()); P2.setHover(h && [h[0], -h[1]]); }
+    else { const r = cv2.getBoundingClientRect(); P2.setHover([(e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s]); }
+  });
+  $(id).addEventListener('pointerleave', () => P2.setHover(null));
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && P2.placing) P2.setPlacing(false); if (e.key === 'Escape' && P2.editMode) P2.setEditMode(null); });
+// Screws (acrylic stack) and clips (snap frame) are edited the same way. Each style keeps its own list in case mm,
+// snapped onto its line when built. Generate shows a suggested set to accept or discard. Add and Remove stay on,
+// so you can click several times, until you press Esc or the button again.
+// P2.clipList is null until the clips are edited: until then the case uses an automatic set.
+P2.screwList = []; P2.clipList = null; P2.editMode = null; P2.planPreview = null;
+const isSnap = () => P2.style === 'snap';
+const editEl = name => $('#' + (isSnap() ? 'clip' : 'screw') + name); // the active style's copy of a control
+P2.placed = () => !P2.cs ? [] : isSnap() ? (P2.cs.clips || []) : P2.cs.analysis ? P2.cs.analysis.screws : [];
+P2.nearestPlaced = function (x, y) { let o = null, bd = Math.max(6, P2.p ? (isSnap() ? P2.p.clipW / 2 + 1 : 0) : 0); for (const q of P2.placed()) { const d = Math.hypot(q.x - x, q.y - y); if (d < bd) { bd = d; o = q; } } return o; };
+P2.addAt = function (x, y) { // where a screw or clip added at (x, y) would land
+  if (isSnap()) return SnapGen.clipAt(P2.cs, x, y);
+  const line = P2.cs.analysis && P2.cs.analysis.path; if (!line || !line.length) return null;
+  let b = line[0], bd = Infinity; for (const q of line) { const d = (q[0] - x) ** 2 + (q[1] - y) ** 2; if (d < bd) { bd = d; b = q; } }
+  return { x: b[0], y: b[1] };
+};
+P2.editHintText = function () {
+  const one = isSnap() ? 'clip' : 'screw', n = P2.placed().length;
+  if (P2.editMode === 'add') return `Click where each new ${one} should go. Keep clicking to add more. Press Esc or ${one === 'clip' ? 'Add a clip' : 'Add a screw'} to stop.`;
+  if (P2.editMode === 'remove') return `Click each ${one} to remove. Press Esc or ${one === 'clip' ? 'Remove a clip' : 'Remove a screw'} to stop.`;
+  if (isSnap()) return P2.clipList ? `${n} clip${n === 1 ? '' : 's'} placed by you. Add or remove clips, or generate a new set.` : `${n} clips placed automatically. Add, remove or generate to change them.`;
+  return n ? `${n} screw${n === 1 ? '' : 's'} placed. Add or remove screws at any time, or generate a new set.` : 'No screws yet. Generate a suggested set, or add your own by clicking the case.';
+};
+P2.setEditMode = function (mode) {
+  P2.editMode = mode; if (mode && P2.placing) P2.setPlacing(false);
+  for (const k of ['screw', 'clip']) { $(`#${k}Add`).setAttribute('aria-pressed', String(mode === 'add')); $(`#${k}Del`).setAttribute('aria-pressed', String(mode === 'remove')); }
+  editEl('Hint').textContent = P2.editHintText();
   $('#cv2').style.cursor = $('#cv3').style.cursor = mode || P2.placing ? 'crosshair' : '';
-};
-P2.setScrewPreview = function (plan) {
-  P2.screwPreview = plan; $('#screwPrev').hidden = !plan;
-  if (plan) $('#screwPrevHint').textContent = `Preview: ${plan.screws.length} screws, the fewest that keep every gap under ${fmt(plan.span, 0)} mm and surround the middle.` + (plan.warnings.length ? ' ' + plan.warnings.join(' ') : '');
   P2.drawOverlay();
 };
-$('#screwAdd').addEventListener('click', () => P2.setScrewMode(P2.screwMode === 'add' ? null : 'add'));
-$('#screwDel').addEventListener('click', () => P2.setScrewMode(P2.screwMode === 'remove' ? null : 'remove'));
-$('#screwGen').addEventListener('click', () => { if (P2.cs) { P2.setScrewMode(null); P2.setScrewPreview(CaseGen.planScrews(P2.cs, P2.p)); } });
-$('#screwAccept').addEventListener('click', () => { const pl = P2.screwPreview; if (!pl) return; P2.screwList = pl.screws.map(s => [s.x, s.y]); P2.setScrewPreview(null); P2.setScrewMode(null); P2.recompute(); });
-$('#screwDiscard').addEventListener('click', () => P2.setScrewPreview(null));
+P2.setPlanPreview = function (plan) {
+  P2.planPreview = plan; $('#screwPrev').hidden = $('#clipPrev').hidden = true;
+  if (plan) { editEl('Prev').hidden = false; editEl('PrevHint').textContent = plan.text; }
+  P2.drawOverlay();
+};
+for (const k of ['screw', 'clip']) {
+  $(`#${k}Add`).addEventListener('click', () => P2.setEditMode(P2.editMode === 'add' ? null : 'add'));
+  $(`#${k}Del`).addEventListener('click', () => P2.setEditMode(P2.editMode === 'remove' ? null : 'remove'));
+  $(`#${k}Discard`).addEventListener('click', () => P2.setPlanPreview(null));
+  $(`#${k}Accept`).addEventListener('click', () => {
+    const pl = P2.planPreview; if (!pl) return; const list = pl.items.map(o => [o.x, o.y]);
+    if (isSnap()) P2.clipList = list; else P2.screwList = list;
+    P2.setPlanPreview(null); P2.setEditMode(null); P2.recompute();
+  });
+}
+$('#screwGen').addEventListener('click', () => {
+  if (!P2.cs) return; P2.setEditMode(null); const pl = CaseGen.planScrews(P2.cs, P2.p);
+  P2.setPlanPreview({ items: pl.screws, text: `Preview: ${pl.screws.length} screws, the fewest that keep every gap under ${fmt(pl.span, 0)} mm and surround the middle.` + (pl.warnings.length ? ' ' + pl.warnings.join(' ') : '') });
+});
+$('#clipGen').addEventListener('click', () => {
+  if (!P2.cs) return; P2.setEditMode(null); const items = SnapGen.planClips(P2.cs, P2.p);
+  P2.setPlanPreview({ items, text: `Preview: ${items.length} clips, spread evenly and moved onto the straightest parts of the wall.` });
+});
 P2.caseClick = function (x, y) { // a click on the case in either view; true if it was used
   if (P2.placing) { P2.placeKeyring(x, y); return true; }
-  if (!P2.screwMode) return false;
-  if (P2.screwMode === 'add') P2.screwList.push([x, y]);
-  else { // remove the placed screw nearest the click, within 6 mm
-    const scr = (P2.cs && P2.cs.analysis) ? P2.cs.analysis.screws : []; let s = null, bd = 6;
-    for (const q of scr) { const d = Math.hypot(q.x - x, q.y - y); if (d < bd) { bd = d; s = q; } }
-    if (!s) { toast('Click closer to a screw.'); return true; }
-    P2.screwList = scr.filter(q => q !== s).map(q => [q.x, q.y]);
+  if (!P2.editMode || !P2.cs) return false;
+  const own = P2.placed().map(o => [o.x, o.y]); // the current set, so editing an automatic clip set keeps the rest
+  if (P2.editMode === 'add') own.push([x, y]);
+  else {
+    const o = P2.nearestPlaced(x, y); if (!o) { toast(`Click closer to a ${isSnap() ? 'clip' : 'screw'}.`); return true; }
+    own.splice(P2.placed().indexOf(o), 1);
   }
-  P2.setScrewMode(null); P2.recompute(); return true;
+  if (isSnap()) P2.clipList = own; else P2.screwList = own;
+  P2.recompute(); return true; // the mode stays on for the next click
 };
 P2.placeKeyring = function (x, y) { // x, y in case mm, y down
   if (!P2.cs || !P2.cs.lines.cavity) return;
@@ -504,13 +553,16 @@ P2.params = () => ({
   join: joinSeg.value, screwList: P2.screwList, screw: $('#screw').value, counterbore: $('#cbore').checked, minScrews: Math.max(2, Math.round(num('#minScrews'))), edge: Math.max(0.5, num('#edge')),
   grooveOffset: Math.max(0.3, num('#gOff')), grooveWidth: Math.max(0.2, num('#gW')), grooveDepth: Math.max(0.1, num('#gD')),
   lip: Math.max(1, num('#lip')), wall: Math.max(2, num('#wall')), faceT: Math.max(0.8, num('#faceT')), fit: Math.max(0.05, num('#fit') || 0.2),
-  clips: Math.max(0, Math.round(num('#clips')) || 0), clipW: Math.max(4, num('#clipW') || 6), // clips 0 = choose automatically
+  clipList: P2.clipList, clips: Math.max(0, Math.round(num('#clips')) || 0), clipW: Math.max(4, num('#clipW') || 6), // clips 0 = choose automatically
 });
 P2.enter = function () {
   if (!(P1.line && P1.mmPerPx)) $('#srcHint').textContent = 'Nothing traced yet. Set the scale and trace an outline in the Outline tab.';
   if (P2.dirty) P2.recompute(); else P2.show();
 };
+// #RRGGBB to 0..1 numbers, for the WebGL colours.
+const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
 P2.show = function () {
+  for (const it of viewer.items) if (it.printed) { it.color = rgb(css('--print')); it.edge = [...rgb(css('--print-edge')), 0.8]; } // follow light / dark
   const has = !!P2.cs;
   $('#empty2').hidden = has; $('#cv2').hidden = !has || P2.view !== 'layout'; $('#cv3').hidden = !has || P2.view !== '3d';
   $('#explodeBox').hidden = P2.view !== '3d'; $('#screwBox').hidden = !has || P2.view !== '3d' || !(P2.meshes && P2.meshes.screws); $('#navHint').hidden = $('#cubeBox').hidden = !has || P2.view !== '3d'; if (P2.view !== '3d') $('#photoBox').hidden = true; else if (has) $('#photoBox').hidden = !viewer.photo; $('#legend').hidden = !has || P2.view !== 'layout'; $('#tools').hidden = P2.view === '3d' && has;
@@ -527,7 +579,7 @@ P2.recompute = function () {
     P2.cs = cs; P2.meshes = ms; P2.p = p;
     const bb = Geo.bbox(cs.lines.outer);
     if (P2.style === 'snap') {
-      const D = cs.dims, clear = { color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7] }, printed = { color: [0.16, 0.62, 0.70], alpha: 1, edge: [0.05, 0.30, 0.35, 0.8] };
+      const D = cs.dims, clear = { color: [0.82, 0.95, 0.97], alpha: 0.32, edge: [0.55, 0.80, 0.84, 0.7] }, printed = { printed: true, color: [1, 1, 1], alpha: 1, edge: [0, 0, 0, 0.8] }; // colours come from the theme in P2.show
       viewer.setItems([ // layer = how many explode steps up or down the part moves
         { mesh: ms.back, ...printed, layer: -2, zc: D.zm / 2 },
         { mesh: ms.backSheet, ...clear, layer: -1, zc: p.faceT + p.plateT / 2 },
@@ -550,7 +602,7 @@ P2.recompute = function () {
     const key = Geo.bbox(fig).w.toFixed(1) + ',' + Geo.bbox(fig).h.toFixed(1); if (key !== P2.figKey) { P2.figKey = key; P2.lvOK = false; }
     const fb = Geo.bbox(cs.lines.figure); $('#srcHint').textContent = `Built from the traced outline, ${fmt(fb.w)} × ${fmt(fb.h)} mm. Edit it in the Outline tab.`;
     $('#t2sub').textContent = `${fmt(bb.w, 0)} × ${fmt(bb.h, 0)} mm`;
-    P2.updateAnalysis(); P2.updateBOM(); P2.show(); updateHud();
+    P2.updateAnalysis(); P2.updateBOM(); P2.show(); updateHud(); editEl('Hint').textContent = P2.editHintText(); P2.drawOverlay();
   });
 };
 // A lightly shaded silhouette of the traced outline, laid on top of the object in the 3D view.
@@ -644,7 +696,7 @@ P2.drawLayout = function () {
   cv2.addEventListener('pointerdown', e => { try { cv2.setPointerCapture(e.pointerId); } catch (_) {} pts.set(e.pointerId, [e.clientX, e.clientY]); st = { x: e.clientX, y: e.clientY, v: { ...P2.lv } }; });
   cv2.addEventListener('pointermove', e => { if (!pts.has(e.pointerId) || !st) return; P2.lv = { ...st.v, tx: st.v.tx + e.clientX - st.x, ty: st.v.ty + e.clientY - st.y }; P2.drawLayout(); });
   const up = e => {
-    if (st && (P2.placing || P2.screwMode) && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 5) { const r = cv2.getBoundingClientRect(); P2.caseClick((e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s); }
+    if (st && (P2.placing || P2.editMode) && Math.hypot(e.clientX - st.x, e.clientY - st.y) < 5) { const r = cv2.getBoundingClientRect(); P2.caseClick((e.clientX - r.left - P2.lv.tx) / P2.lv.s, (e.clientY - r.top - P2.lv.ty) / P2.lv.s); }
     pts.delete(e.pointerId); st = null;
   };
   cv2.addEventListener('pointerup', up); cv2.addEventListener('pointercancel', up);

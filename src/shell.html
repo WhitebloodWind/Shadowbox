@@ -9,23 +9,24 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#ECF2F3; --panel:#FFFFFF; --panel-2:#F3F8F9; --ink:#12201F; --muted:#526567; --line:#CFDDDF;
-  --mat:#0F5A66; --mat-ink:#E2F4F6; --cut:#E0372A; --engrave:#B7C4FF; --accent:#0A7D8F; --accent-ink:#FFFFFF;
-  --warn-bg:#FBEEDF; --warn-ink:#8A4510; --ok:#0A7D8F; --focus:#0A7D8F;
+  /* Light: bright, friendly blues. Dark: near-black with electric cyan and hot pink. */
+  --bg:#EAF4FF; --panel:#FFFFFF; --panel-2:#F1F7FF; --ink:#0A1A33; --muted:#4B5F7E; --line:#CFE1F7;
+  --mat:#1C7CF2; --mat-ink:#FFFFFF; --cut:#FF3B5C; --engrave:#FFE066; --accent:#0071F2; --accent-ink:#FFFFFF;
+  --warn-bg:#FFF1DC; --warn-ink:#8A4510; --ok:#0071F2; --focus:#0071F2; --print:#F4F9FF; --print-edge:#1557B0;
   color-scheme: light;
   box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0C1416; --panel:#131C1F; --panel-2:#182427; --ink:#E0ECEE; --muted:#93A8AB; --line:#26383B;
-    --mat:#0B3C45; --mat-ink:#D2ECEF; --cut:#FF5D50; --engrave:#B7C4FF; --accent:#3CC8DA; --accent-ink:#06171A;
-    --warn-bg:#3A2A18; --warn-ink:#F2C08A; --ok:#5FD6E4; --focus:#3CC8DA; color-scheme: dark;
+    --bg:#06080D; --panel:#0C1018; --panel-2:#111724; --ink:#E4ECF8; --muted:#8190A8; --line:#1C2435;
+    --mat:#080C16; --mat-ink:#C5D3EC; --cut:#FF2E88; --engrave:#A98BFF; --accent:#00E5FF; --accent-ink:#00141A;
+    --warn-bg:#2E1A10; --warn-ink:#FFB27A; --ok:#00E5FF; --focus:#00E5FF; --print:#10283A; --print-edge:#00E5FF; color-scheme: dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0C1416; --panel:#131C1F; --panel-2:#182427; --ink:#E0ECEE; --muted:#93A8AB; --line:#26383B;
-  --mat:#0B3C45; --mat-ink:#D2ECEF; --cut:#FF5D50; --engrave:#B7C4FF; --accent:#3CC8DA; --accent-ink:#06171A;
-  --warn-bg:#3A2A18; --warn-ink:#F2C08A; --ok:#5FD6E4; --focus:#3CC8DA; color-scheme: dark;
+  --bg:#06080D; --panel:#0C1018; --panel-2:#111724; --ink:#E4ECF8; --muted:#8190A8; --line:#1C2435;
+  --mat:#080C16; --mat-ink:#C5D3EC; --cut:#FF2E88; --engrave:#A98BFF; --accent:#00E5FF; --accent-ink:#00141A;
+  --warn-bg:#2E1A10; --warn-ink:#FFB27A; --ok:#00E5FF; --focus:#00E5FF; --print:#10283A; --print-edge:#00E5FF; color-scheme: dark;
 }
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none !important}
@@ -111,7 +112,7 @@ table.bom td.q{text-align:right;font-weight:650}
 .empty .card{max-width:420px}
 .empty h2{font-weight:750;font-stretch:115%;font-size:28px;line-height:1.1;margin:0 0 10px;letter-spacing:-.01em}
 .empty p{margin:0 0 16px;opacity:.85}
-.empty .btn{background:var(--mat-ink);color:#0B3C45;border-color:transparent}
+.empty .btn{background:var(--mat-ink);color:var(--mat);border-color:transparent}
 .busy{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600}
 .busy[hidden]{display:none}
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:9px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10}
@@ -284,7 +285,10 @@ input[type=file]{display:none}
             <div data-style="snap" hidden>
               <div class="row"><label for="clips">Number of clips</label><input type="number" id="clips" placeholder="auto" min="2" step="1"><span class="val"></span></div>
               <div class="row"><label for="clipW">Clip width</label><input type="number" id="clipW" value="6" min="4" step="0.5"><span class="val">mm</span></div>
-              <p class="hint">Leave the number empty to space clips about every 45 mm. They are moved onto the straightest parts of the wall.</p>
+              <p class="hint">Generate spaces the clips about every 45 mm when the number is empty, on the straightest parts of the wall.</p>
+              <div class="btns"><button class="btn" id="clipGen">Generate clips</button><button class="btn" id="clipAdd" aria-pressed="false">Add a clip</button><button class="btn" id="clipDel" aria-pressed="false">Remove a clip</button></div>
+              <div id="clipPrev" hidden><p class="hint" id="clipPrevHint"></p><div class="btns"><button class="btn primary" id="clipAccept">Accept</button><button class="btn" id="clipDiscard">Discard</button></div></div>
+              <p class="hint" id="clipHint"></p>
             </div>
             <div class="readout" id="analysis" hidden></div>
             <div id="warnings"></div>
