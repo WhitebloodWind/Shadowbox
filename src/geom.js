@@ -248,68 +248,82 @@ const Geo = (() => {
   }
 
   // ----- Extrusion mesh from a field (inside > 0) -----
-  // fieldAt(x,y) in mm. Returns {pos, nor, lines}
+  // fieldAt(x,y) in mm. Returns {pos, nor, lines}: one closed, watertight shell (every edge shared by exactly two
+  // triangles), so slicers see no open or non-manifold edges. Marching squares per grid cell: the cell's inside
+  // polygon gives the top and bottom faces, its edges across the cell give the side walls. Crossing points are
+  // computed once per grid edge and shared, so neighbouring cells and the walls meet at identical vertices.
   function extrude(fieldAt, bb, z0, z1, step = 0.35) {
     const ox = bb.x0 - 2 * step, oy = bb.y0 - 2 * step;
     const W = Math.ceil((bb.w + 4 * step) / step) + 1, H = Math.ceil((bb.h + 4 * step) / step) + 1;
     const F = new Float32Array(W * H);
-    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) F[j * W + i] = fieldAt(ox + i * step, oy + j * step);
-    const P = [], N = [];
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      let v = fieldAt(ox + i * step, oy + j * step);
+      if (i === 0 || j === 0 || i === W - 1 || j === H - 1) v = Math.min(v, -1e-3); // closed at the grid border
+      F[j * W + i] = v === 0 ? -1e-9 : v; // never exactly 0, so a crossing never lands on a node
+    }
+    const P = [], N = [], lines = [];
     const X = i => ox + i * step, Y = j => oy + j * step;
-    const tri = (a, b, c, nz) => { // a,b,c: [x,y] mm (y down) at height z; want normal sign nz
+    const node = (i, j) => [X(i), Y(j)];
+    const clampT = u => Math.min(0.995, Math.max(0.005, u));
+    const cache = new Map(); // grid edge -> crossing point, so every user of an edge gets the same numbers
+    const hcross = (i, j) => { const k = 2 * (j * W + i); let p = cache.get(k); if (!p) { const a = F[j * W + i], b = F[j * W + i + 1]; p = [X(i) + step * clampT(a / (a - b)), Y(j)]; cache.set(k, p); } return p; };
+    const vcross = (i, j) => { const k = 2 * (j * W + i) + 1; let p = cache.get(k); if (!p) { const a = F[j * W + i], b = F[(j + 1) * W + i]; p = [X(i), Y(j) + step * clampT(a / (a - b))]; cache.set(k, p); } return p; };
+    const tri = (a, b, c, nz) => { // flat triangle at the top (nz 1) or bottom (nz -1); y flips to point up in 3D
       const A = [a[0], -a[1]], B = [b[0], -b[1]], C = [c[0], -c[1]];
       const cross = (B[0] - A[0]) * (C[1] - A[1]) - (B[1] - A[1]) * (C[0] - A[0]);
-      const z = nz > 0 ? z1 : z0;
-      const list = (cross > 0) === (nz > 0) ? [A, B, C] : [A, C, B];
+      const z = nz > 0 ? z1 : z0, list = (cross > 0) === (nz > 0) ? [A, B, C] : [A, C, B];
       for (const p of list) { P.push(p[0], p[1], z); N.push(0, 0, nz); }
     };
-    const face = (poly) => { for (let k = 1; k + 1 < poly.length; k++) { tri(poly[0], poly[k], poly[k + 1], 1); tri(poly[0], poly[k], poly[k + 1], -1); } };
-    const interp = (p, q, a, b) => { const t = a / (a - b); return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]; };
-    for (let j = 0; j < H - 1; j++) {
-      let run = -1;
-      for (let i = 0; i < W - 1; i++) {
-        const v = [F[j * W + i], F[j * W + i + 1], F[(j + 1) * W + i + 1], F[(j + 1) * W + i]];
-        const full = v[0] > 0 && v[1] > 0 && v[2] > 0 && v[3] > 0;
-        if (full) { if (run < 0) run = i; continue; }
-        if (run >= 0) { face([[X(run), Y(j)], [X(i), Y(j)], [X(i), Y(j + 1)], [X(run), Y(j + 1)]]); run = -1; }
-        if (!(v[0] > 0 || v[1] > 0 || v[2] > 0 || v[3] > 0)) continue;
-        const c = [[X(i), Y(j)], [X(i + 1), Y(j)], [X(i + 1), Y(j + 1)], [X(i), Y(j + 1)]];
-        const ins = v.map(a => a > 0);
-        const saddle = (ins[0] && ins[2] && !ins[1] && !ins[3]) || (ins[1] && ins[3] && !ins[0] && !ins[2]);
-        if (saddle && (v[0] + v[1] + v[2] + v[3]) / 4 <= 0) {
-          for (let k = 0; k < 4; k++) if (ins[k]) {
-            const pk = (k + 3) % 4, nk = (k + 1) % 4;
-            face([interp(c[pk], c[k], v[pk], v[k]), c[k], interp(c[k], c[nk], v[k], v[nk])]);
-          }
-          continue;
-        }
-        const poly = [];
-        for (let k = 0; k < 4; k++) {
-          const nk = (k + 1) % 4;
-          if (ins[k]) poly.push(c[k]);
-          if (ins[k] !== ins[nk]) poly.push(interp(c[k], c[nk], v[k], v[nk]));
-        }
-        if (poly.length >= 3) face(poly);
-      }
-      if (run >= 0) face([[X(run), Y(j)], [X(W - 1), Y(j)], [X(W - 1), Y(j + 1)], [X(run), Y(j + 1)]]);
+    const wall = (a, b, cx, cy) => { // vertical quad on segment a-b, facing away from (cx, cy), a point inside
+      const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy); if (len < 1e-12) return;
+      let nx = dy / len, ny = -dx / len; if ((cx - a[0]) * nx + (cy - a[1]) * ny > 0) { nx = -nx; ny = -ny; }
+      const n3 = [nx, -ny, 0], A0 = [a[0], -a[1], z0], B0 = [b[0], -b[1], z0], B1 = [b[0], -b[1], z1], A1 = [a[0], -a[1], z1];
+      const push = (p, q, r) => {
+        const u = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], w = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
+        const c = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+        for (const s of c[0] * n3[0] + c[1] * n3[1] + c[2] * n3[2] >= 0 ? [p, q, r] : [p, r, q]) { P.push(s[0], s[1], s[2]); N.push(n3[0], n3[1], n3[2]); }
+      };
+      push(A0, B0, B1); push(A0, B1, A1);
+      lines.push(a[0], -a[1], z0, b[0], -b[1], z0, a[0], -a[1], z1, b[0], -b[1], z1);
+    };
+    const piece = poly => { // a convex inside polygon of one cell: top, bottom, and walls on its edges that cross the cell
+      for (let k = 1; k + 1 < poly.length; k++) { tri(poly[0].p, poly[k].p, poly[k + 1].p, 1); tri(poly[0].p, poly[k].p, poly[k + 1].p, -1); }
+      let cx = 0, cy = 0; for (const v of poly) { cx += v.p[0]; cy += v.p[1]; } cx /= poly.length; cy /= poly.length;
+      for (let k = 0; k < poly.length; k++) { const a = poly[k], b = poly[(k + 1) % poly.length]; if (a.cut && b.cut) wall(a.p, b.p, cx, cy); }
+    };
+    const full = new Uint8Array(W * H), used = new Uint8Array(W * H); // cells fully inside; nodes other faces use
+    const nodeAt = (i, j, k) => (j + (k >> 1)) * W + i + (k === 1 || k === 2 ? 1 : 0); // corner k of cell (i, j), as a node index
+    for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) {
+      const v = [F[j * W + i], F[j * W + i + 1], F[(j + 1) * W + i + 1], F[(j + 1) * W + i]]; // TL TR BR BL
+      const ins = v.map(a => a > 0); if (!ins.some(Boolean)) continue;
+      if (ins.every(Boolean)) { full[j * W + i] = 1; continue; }
+      const corner = [node(i, j), node(i + 1, j), node(i + 1, j + 1), node(i, j + 1)];
+      const cut = [() => hcross(i, j), () => vcross(i + 1, j), () => hcross(i, j + 1), () => vcross(i, j)]; // edge k runs corner k -> k+1
+      const ring = []; // corners and crossings in order round the cell
+      for (let k = 0; k < 4; k++) { if (ins[k]) { ring.push({ p: corner[k], k }); used[nodeAt(i, j, k)] = 1; } if (ins[k] !== ins[(k + 1) % 4]) ring.push({ p: cut[k](), cut: true }); }
+      const saddle = ins[0] === ins[2] && ins[1] === ins[3] && ins[0] !== ins[1];
+      if (saddle && (v[0] + v[1] + v[2] + v[3]) / 4 <= 0) { // two separate corner triangles
+        for (let k = 0; k < 4; k++) if (ins[k]) { const r = ring.findIndex(q => q.k === k); piece([ring[(r - 1 + ring.length) % ring.length], ring[r], ring[(r + 1) % ring.length]]); }
+      } else piece(ring);
     }
-    // walls
-    const loops = contours(F, W, H, 0).map(l => l.map(([x, y]) => [ox + x * step, oy + y * step]));
-    const lines = [];
-    for (const loop of loops) {
-      for (let k = 0, n = loop.length; k < n; k++) {
-        const a = loop[k], b = loop[(k + 1) % n];
-        const dx = b[0] - a[0], dy = b[1] - a[1]; const len = Math.hypot(dx, dy); if (len < 1e-9) continue;
-        let nx = dy / len, ny = -dx / len; // candidate normal in y-down plane
-        const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
-        if (fieldAt(mx + nx * step * 0.3, my + ny * step * 0.3) > fieldAt(mx - nx * step * 0.3, my - ny * step * 0.3)) { nx = -nx; ny = -ny; }
-        const n3 = [nx, -ny, 0];
-        const A0 = [a[0], -a[1], z0], B0 = [b[0], -b[1], z0], B1 = [b[0], -b[1], z1], A1 = [a[0], -a[1], z1];
-        const cr = (p, q, r) => { const u = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], w = [r[0] - p[0], r[1] - p[1], r[2] - p[2]]; return [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]; };
-        const push = (p, q, r) => { const c = cr(p, q, r); const ok = c[0] * n3[0] + c[1] * n3[1] + c[2] * n3[2] >= 0; const L = ok ? [p, q, r] : [p, r, q]; for (const s of L) { P.push(s[0], s[1], s[2]); N.push(n3[0], n3[1], n3[2]); } };
-        push(A0, B0, B1); push(A0, B1, A1);
-        lines.push(a[0], -a[1], z0, b[0], -b[1], z0, a[0], -a[1], z1, b[0], -b[1], z1);
-      }
+    // Fully inside cells: greedy rectangles, each a fan round its centre through every boundary node another face
+    // uses, so no edge ends part-way along another (no T-junctions) and the shell stays watertight.
+    const rects = [];
+    for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) {
+      if (!full[j * W + i]) continue;
+      let i1 = i; while (i1 + 1 < W - 1 && full[j * W + i1 + 1]) i1++;
+      let j1 = j; for (;;) { const r = j1 + 1; if (r >= H - 1) break; let ok = true; for (let q = i; q <= i1; q++) if (!full[r * W + q]) { ok = false; break; } if (!ok) break; j1 = r; }
+      for (let r = j; r <= j1; r++) for (let q = i; q <= i1; q++) full[r * W + q] = 0;
+      rects.push([i, j, i1 + 1, j1 + 1]); used[j * W + i] = used[j * W + i1 + 1] = used[(j1 + 1) * W + i] = used[(j1 + 1) * W + i1 + 1] = 1;
+    }
+    for (const [a, b, c, d] of rects) {
+      const loop = [];
+      for (let q = a; q < c; q++) if (q === a || used[b * W + q]) loop.push(node(q, b));
+      for (let r = b; r < d; r++) if (r === b || used[r * W + c]) loop.push(node(c, r));
+      for (let q = c; q > a; q--) if (q === c || used[d * W + q]) loop.push(node(q, d));
+      for (let r = d; r > b; r--) if (r === d || used[r * W + a]) loop.push(node(a, r));
+      const m = [(X(a) + X(c)) / 2, (Y(b) + Y(d)) / 2];
+      for (let k = 0; k < loop.length; k++) { tri(m, loop[k], loop[(k + 1) % loop.length], 1); tri(m, loop[k], loop[(k + 1) % loop.length], -1); }
     }
     return { pos: new Float32Array(P), nor: new Float32Array(N), lines: new Float32Array(lines) };
   }

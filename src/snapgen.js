@@ -157,22 +157,27 @@ const SnapGen = (() => {
     const wall = (x, y) => Math.min(outer(x, y), -cav(x, y), hole(x, y));  // ring round the sheets
     // a clip's own frame: u along the wall, v outward from the middle of the wall
     const uv = (cl, x, y) => [(x - cl.x) * cl.tx + (y - cl.y) * cl.ty, (x - cl.x) * cl.nx + (y - cl.y) * cl.ny];
-    const hw = p.clipW / 2, zw = hw + K.slit + 1, R = p.wall / 2 + c + p.lip + 1.5;
-    const zone = cl => (x, y) => { const [u, v] = uv(cl, x, y); return Math.min(zw - Math.abs(u), R - Math.abs(v)); };
+    const hw = p.clipW / 2, zw = hw + K.slit + 1;
+    // fine-mesh box round a clip: its width plus slits, and across the wall only where the clip details are
+    const vLo = cl => cl.vt - K.barb - c - 1, vHi = cl => cl.vt + K.tabT + 1.5;
+    const zone = cl => (x, y) => { const [u, v] = uv(cl, x, y); return Math.min(zw - Math.abs(u), v - vLo(cl), vHi(cl) - v); };
     const zones = (x, y) => { let m = -1e3; for (const cl of clips) m = Math.max(m, zone(cl)(x, y)); return m; };
     const coarse = f => (x, y) => Math.min(f(x, y), -zones(x, y));
     const band = (cl, a, b) => (x, y) => { const [u, v] = uv(cl, x, y); return Math.min(a - Math.abs(u), v - b); }; // |u| <= a and v >= b
     // slabs between sorted heights; pick(zMid) returns the field for that slab, or null for nothing
-    const stack = (bb, zs, pick, step) => {
+    // Each slab is a closed shell. A slab that has another on top reaches EPS into it, so the two overlap instead of
+    // touching: touching shells share edges between four faces, which slicers report as non-manifold.
+    const EPS = 0.01, slab = (f, bb, za, zb, top, step) => G.extrude(f, bb, za, zb >= top - 1e-6 ? zb : zb + EPS, step);
+    const stack = (bb, zs, pick, step, top) => {
       const out = [], z = [...new Set(zs.map(v => +v.toFixed(4)))].sort((a, b) => a - b);
-      for (let i = 0; i + 1 < z.length; i++) { if (z[i + 1] - z[i] < 0.02) continue; const f = pick((z[i] + z[i + 1]) / 2); if (f) out.push(G.extrude(f, bb, z[i], z[i + 1], step)); }
+      for (let i = 0; i + 1 < z.length; i++) { if (z[i + 1] - z[i] < 0.02) continue; const f = pick((z[i] + z[i + 1]) / 2); if (f) out.push(slab(f, bb, z[i], z[i + 1], top, step)); }
       return out;
     };
-    const back = [G.extrude(coarse(rim), bbo, 0, p.faceT), G.extrude(coarse(wall), bbo, p.faceT, D.zm)];
-    const front = [G.extrude(coarse(wall), bbo, D.zm, D.zf), G.extrude(coarse(rim), bbo, D.zf, D.H)];
+    const back = [slab(coarse(rim), bbo, 0, p.faceT, D.zm), slab(coarse(wall), bbo, p.faceT, D.zm, D.zm)];
+    const front = [slab(coarse(wall), bbo, D.zm, D.zf, D.H), slab(coarse(rim), bbo, D.zf, D.H, D.H)];
     for (const cl of clips) {
-      const zf_ = zone(cl), inZone = f => (x, y) => Math.min(f(x, y), zf_(x, y) + 0.05); // +0.05: overlap the coarse mesh slightly
-      const corners = [[-zw, -R], [zw, -R], [zw, R], [-zw, R]].map(([u, v]) => [cl.x + cl.tx * u + cl.nx * v, cl.y + cl.ty * u + cl.ny * v]);
+      const zf_ = zone(cl), inZone = f => (x, y) => Math.min(f(x, y), zf_(x, y) + 0.2); // +0.2: overlap the coarse mesh so the two never just touch
+      const corners = [[-zw, vLo(cl)], [zw, vLo(cl)], [zw, vHi(cl)], [-zw, vHi(cl)]].map(([u, v]) => [cl.x + cl.tx * u + cl.nx * v, cl.y + cl.ty * u + cl.ny * v]);
       const bb = G.bbox(corners);
       // back border: a notch for the tab, deeper where the hook sits so it has a ledge to catch under
       const notch = band(cl, hw + c, cl.vt - c), groove = band(cl, hw + c, cl.vt - K.barb - c);
@@ -180,7 +185,7 @@ const SnapGen = (() => {
       back.push(...stack(bb, [0, g0, g1, p.faceT, D.zm], z => {
         const base = z < p.faceT ? rim : wall, cut = z < g0 ? null : z < g1 ? groove : notch;
         return inZone(cut ? (x, y) => Math.min(base(x, y), -cut(x, y)) : base);
-      }, 0.12));
+      }, 0.12, D.zm));
       // front border: the tab hangs from the rim, freed from the wall by a slit each side and a gap behind;
       // its hook is stepped so it rides over the back wall as the halves are pressed together
       const tab = inset => { const b = band(cl, hw, cl.vt - inset); return (x, y) => Math.min(b(x, y), outer(x, y)); };
@@ -190,7 +195,7 @@ const SnapGen = (() => {
         if (z > D.zm) return inZone((x, y) => Math.max(Math.min(wall(x, y), -freed(x, y)), plain(x, y)));
         if (z > D.zt + K.barbH) return inZone(plain);
         return inZone(tab(K.barb * Math.min(3, 1 + Math.floor((z - D.zt) / s)) / 3));
-      }, 0.12));
+      }, 0.12, D.H));
     }
     const sb = G.bbox(cs.lines.sheet), fb = G.bbox(cs.lines.figure);
     return {

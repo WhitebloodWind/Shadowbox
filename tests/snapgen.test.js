@@ -54,4 +54,18 @@ const zs = mesh => { let lo = Infinity, hi = -Infinity; for (let i = 2; i < mesh
 near(zs(m.back)[0], 0, 1e-6, 'back border starts at the bottom'); near(zs(m.back)[1], D.zm, 1e-6, 'back border ends at mid-height');
 near(zs(m.front)[0], D.zt, 1e-4, 'front border reaches down to the tab tips'); near(zs(m.front)[1], D.H, 1e-4, 'front border ends at the top');
 
+// Printed parts must be watertight for slicers: every edge is used once in each direction (closed, consistently
+// facing outward, no edge shared by more than two triangles) and no triangle has zero area.
+const watertight = (mesh, name) => {
+  const key = i => mesh.pos[i] + ',' + mesh.pos[i + 1] + ',' + mesh.pos[i + 2], E = new Map();
+  for (let t = 0; t < mesh.pos.length / 9; t++) {
+    const k = [key(t * 9), key(t * 9 + 3), key(t * 9 + 6)];
+    assert.ok(k[0] !== k[1] && k[1] !== k[2] && k[0] !== k[2], `${name}: zero-area triangle`);
+    for (let j = 0; j < 3; j++) { const e = k[j] + '|' + k[(j + 1) % 3]; E.set(e, (E.get(e) || 0) + 1); }
+  }
+  for (const [e, n] of E) { const [a, b] = e.split('|'); assert.ok(n === 1 && E.get(b + '|' + a) === 1, `${name}: edge ${e} is open or shared by more than two triangles`); }
+};
+const kp = { ...p, keyring: true, clips: 6 }, mk = SnapGen.meshes(SnapGen.build(circ(30), kp), kp);
+for (const k of ['back', 'front', 'backSheet']) { watertight(m[k], k); watertight(mk[k], k + ' with keyring'); }
+
 console.log('All snap generator tests passed');
